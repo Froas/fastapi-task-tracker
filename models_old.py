@@ -34,7 +34,6 @@ class Event(EventBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='events')
-    
 
 class TodoBase(SQLModel):
     title: str
@@ -120,6 +119,7 @@ class User(UserBase, table=True):
     tasks: list[Task] = Relationship(back_populates='user')
     todos: list[Todo] = Relationship(back_populates='user')
     events: list[Event] = Relationship(back_populates='user')
+    
     
 
     

@@ -7,6 +7,7 @@ from routers.tasks import tasks_router
 from routers.todos import todos_router
 from routers.events import events_router
 
+
 app = FastAPI()
 
 app.include_router(users_router, prefix='/users', tags=['users'])

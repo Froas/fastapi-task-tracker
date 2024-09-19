@@ -1,8 +1,44 @@
 from fastapi import APIRouter, HTTPException, Depends, Query, Path
+from fastapi_users import FastAPIUsers, models as fastapi_models
+from fastapi_users.authentication import JWTStrategy, AuthenticationBackend, BearerTransport
+# from fastapi_users.db import SQL
 from models import User, UserBase,UserRead
 from sqlmodel import Session, select
 from db import get_session
 import uuid
+
+
+
+SECRET = "YOUR_SECRET_KEY"
+
+bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
+
+def get_jwt_strategy() -> JWTStrategy:
+    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
+
+auth_backend = AuthenticationBackend(
+    name="jwt",
+    transport=bearer_transport,
+    get_strategy=get_jwt_strategy,
+)
+
+def get_user_db(session: Session = Depends(get_session)):
+    pass
+    # yield SQLModelUserDatabase(User, session)
+
+# Создание экземпляра FastAPI Users
+# fastapi_users = FastAPIUsers(
+#     get_user_db,
+#     [auth_backend],
+#     User,
+#     fastapi_models.BaseUserCreate,
+#     fastapi_models.BaseUserUpdate,
+#     fastapi_models.BaseUserDB,
+# )
+
+# Определение текущего пользователя
+# current_user = fastapi_users.current_user()
+
 
 users_router = APIRouter()
 
@@ -69,3 +105,20 @@ async def user(
     session.commit()
     session.refresh(user)
     return user
+
+# users_router.include_router(
+#     fastapi_users.get_auth_router(auth_backend),
+#     prefix="/auth/jwt",
+#     tags=["auth"],
+# )
+# users_router.include_router(
+#     fastapi_users.get_register_router(),
+#     prefix="/auth",
+#     tags=["auth"],
+# )
+
+# users_router.include_router(
+#     fastapi_users.get_users_router(),
+#     prefix="/users",
+#     tags=["users"],
+# )
