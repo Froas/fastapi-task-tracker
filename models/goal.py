@@ -23,3 +23,11 @@ class Goal(GoalBase, table=True):
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='goals')
     milestones: List["Milestone"] = Relationship(back_populates='goal')
+    
+class GoalUpdate(SQLModel):
+    id: uuid.UUID
+    title: Optional[str] = None
+    status: Optional[StatusType] = None
+    description: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None

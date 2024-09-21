@@ -1,8 +1,8 @@
-"""Add UserRead model
+"""Add update models
 
-Revision ID: 294f0f10dee7
-Revises: c91a81153147
-Create Date: 2024-09-18 23:26:34.864382
+Revision ID: b74dad160a8c
+Revises: 01822c940ca0
+Create Date: 2024-09-21 15:17:29.881689
 
 """
 from typing import Sequence, Union
@@ -13,8 +13,8 @@ import sqlmodel
 
 
 # revision identifiers, used by Alembic.
-revision: str = '294f0f10dee7'
-down_revision: Union[str, None] = 'c91a81153147'
+revision: str = 'b74dad160a8c'
+down_revision: Union[str, None] = '01822c940ca0'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

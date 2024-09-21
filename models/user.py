@@ -19,9 +19,12 @@ class UserBase(SQLModel):
     
     def set_password(self, password: str):
         self.password_hash = pwd_context.hash(password)
-        
-    def verify_password(self, password: str):
-        return pwd_context.verify(password, self.password_hash)
+    
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
     
 class UserRead(SQLModel):
     id: uuid.UUID
@@ -35,4 +38,7 @@ class User(UserBase, table=True):
     tasks: List["Task"] = Relationship(back_populates='user')
     todos: List["Todo"] = Relationship(back_populates='user')
     events: List["Event"] = Relationship(back_populates='user')
-    
+
+
+class UserInDB(UserBase):
+    hashed_password: str

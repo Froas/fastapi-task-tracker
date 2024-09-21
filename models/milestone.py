@@ -22,3 +22,11 @@ class Milestone(MilestoneBase, table=True):
     user: 'User' = Relationship(back_populates='milestones')
     goal: 'Goal' = Relationship(back_populates='milestones')
     tasks: list["Task"] = Relationship(back_populates='milestone')
+    
+class MilestoneUpdate(SQLModel):
+    id: uuid.UUID
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: Optional[StatusType] = None
+    due_date: Optional[datetime] = None
+    goal_id: Optional[uuid.UUID] = None

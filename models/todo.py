@@ -23,3 +23,12 @@ class Todo(TodoBase, table=True):
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     user: 'User' = Relationship(back_populates='todos')
     task: 'Task' = Relationship(back_populates='todos')
+
+class TodoUpdate(SQLModel):
+    id: uuid.UUID
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[PriorityType] = None
+    repeat_interval: Optional[str] = None
+    next_due_date: Optional[datetime] = None
+    task_id: Optional[uuid.UUID] = None

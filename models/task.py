@@ -25,3 +25,13 @@ class Task(TaskBase, table=True):
     milestone: 'Milestone' = Relationship(back_populates='tasks')
     todos: List["Todo"] = Relationship(back_populates='task')
     
+    
+class TaskUpdate(SQLModel):
+    id: uuid.UUID
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[PriorityType] = None
+    start_date: Optional[datetime] = None
+    status: Optional [StatusType] = None
+    due_date: Optional[datetime] = None
+    milestone_id: Optional[uuid.UUID] = None
