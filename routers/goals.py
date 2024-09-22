@@ -9,7 +9,7 @@ import uuid
 goals_router = APIRouter()
 
 @goals_router.get('/user/goals')
-async def get_all_goal(
+async def get_all_goals(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Goal]:
     goal_list = current_user.goals
@@ -23,8 +23,9 @@ async def get_goal(
 ) -> Goal:
     goal = Goal(
         title=goal_data.title, 
-        start_date=goal_data.start_date, 
-        end_date=goal_data.end_date, 
+        description=goal_data.description,
+        start_datetime=goal_data.start_datetime, 
+        end_datetime=goal_data.end_datetime, 
         user=current_user, 
         user_id=current_user.id
     )

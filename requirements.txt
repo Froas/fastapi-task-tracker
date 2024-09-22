@@ -2,3 +2,6 @@ fastapi
 sqlmodel
 uvicorn
 alembic
+pytz
+uuid
+python-jose[cryptography]

@@ -27,6 +27,9 @@ async def create_event(
         description=event_data.description,
         start_datetime=event_data.start_datetime,
         end_datetime=event_data.end_datetime,
+        event_type=event_data.event_type,
+        recurrence_rule=event_data.recurrence_rule,
+        location=event_data.location,
         user=current_user,
         user_id=current_user.id
     )

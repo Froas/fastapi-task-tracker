@@ -37,8 +37,12 @@ async def create_todo(
         title=todo_data.title,
         description=todo_data.description,
         priority=todo_data.priority,
+        status=todo_data.status,
+        due_date=todo_data.due_date,
         repeat_interval=todo_data.repeat_interval,
         next_due_date=todo_data.next_due_date,
+        start_datetime=todo_data.start_datetime,
+        end_datetime=todo_data.end_datetime,
         task_id=todo_data.task_id,
         user_id=current_user.id,
         user=current_user

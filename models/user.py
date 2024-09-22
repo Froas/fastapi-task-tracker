@@ -10,6 +10,9 @@ if TYPE_CHECKING:
     from .milestone import Milestone
     from .todo import Todo
     from .event import Event
+    from .tag import Tag
+    from .subtask import Subtask
+    
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
 class UserBase(SQLModel):
@@ -33,11 +36,13 @@ class UserRead(SQLModel):
     
 class User(UserBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
-    goals: List["Goal"] = Relationship(back_populates='user')
-    milestones: List["Milestone"] = Relationship(back_populates='user')
-    tasks: List["Task"] = Relationship(back_populates='user')
-    todos: List["Todo"] = Relationship(back_populates='user')
-    events: List["Event"] = Relationship(back_populates='user')
+    goals: List['Goal'] = Relationship(back_populates='user')
+    milestones: List['Milestone'] = Relationship(back_populates='user')
+    tasks: List['Task'] = Relationship(back_populates='user')
+    todos: List['Todo'] = Relationship(back_populates='user')
+    events: List['Event'] = Relationship(back_populates='user')
+    subtasks: List['Subtask'] = Relationship(back_populates='user')
+    tags: List['Tag'] = Relationship(back_populates='user')
 
 
 class UserInDB(UserBase):
