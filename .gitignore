@@ -17,3 +17,5 @@ migrations/versions/*.pyc
 # Virtual environments
 venv/
 venv-*/
+
+pip/

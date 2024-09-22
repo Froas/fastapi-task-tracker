@@ -1,3 +1,3 @@
 from zoneinfo import ZoneInfo
 
-JST = ZoneInfo("Asia/Tokyo") 
+JST = ZoneInfo("Asia/Tokyo")

@@ -1,5 +1,4 @@
 from sqlmodel import SQLModel, Field, Relationship
-# from models  Task, User, Tag
 from typing import Optional, TYPE_CHECKING, List
 from .enums import StatusType, PriorityType
 from datetime import datetime
@@ -20,12 +19,12 @@ class SubtaskBase(SQLModel):
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
-    task_id: Optional[uuid.uuid4] = Field(foreign_key='task.id', default=None)
+    task_id: Optional[uuid.UUID] = Field(foreign_key='task.id', default=None)
     
 
 class Subtask(SubtaskBase, table=True):
-    id: Optional[uuid.uuid4] = Field(primary_key=uuid.uuid4, default_factory=uuid.uuid4)
-    user_id: uuid.uuid4 = Field(foreign_key='user.id')
+    id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
+    user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='subtasks')
     task: 'Task' = Relationship(back_populates='subtasks')
     tags: List['Tag'] = Relationship(back_populates='subtask')
