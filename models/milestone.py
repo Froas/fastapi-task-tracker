@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from .task import Task
     from .tag import Tag
     
+from .task import TaskReadNested
 class MilestoneBase(SQLModel):
     title: str
     description: str
@@ -20,15 +21,29 @@ class MilestoneBase(SQLModel):
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
     goal_id: Optional[uuid.UUID] = Field(foreign_key='goal.id', default=None)
+    
+    
+    # class Config:
+    #     arbitrary_types_allowed = True
 
 class Milestone(MilestoneBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
-    
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='milestones')
     goal: 'Goal' = Relationship(back_populates='milestones')
     tasks: list['Task'] = Relationship(back_populates='milestone')
     tags: List['Tag'] = Relationship(back_populates='milestone')
+
+class MilestoneReadNested(MilestoneBase):
+    id: uuid.UUID
+    tasks: Optional[List['TaskReadNested']] = []
+    # class Config:
+    #     arbitrary_types_allowed = True
+    
+class MilestoneRead(MilestoneBase):
+    id: uuid.UUID
+# class MilestoneReadNested(Milestone):
+#     tasks: List['TaskReadNested']
     
 class MilestoneUpdate(SQLModel):
     id: uuid.UUID

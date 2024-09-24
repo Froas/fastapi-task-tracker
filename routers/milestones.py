@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
-from models import Milestone, MilestoneBase, MilestoneUpdate, get_current_active_user
+from models import Milestone, MilestoneBase, MilestoneReadNested, MilestoneUpdate, Task, get_current_active_user
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload, noload
 from routers.users import User
 from db import get_session
 from typing import Annotated
@@ -59,9 +60,34 @@ async def update_milestone(
 async def get_milestone(
     current_user: Annotated[User, Depends(get_current_active_user)],
     milestone_id: uuid.UUID,
+    include_tasks: bool = False,
+    include_subtasks: bool = False,
+    include_todos: bool = False,
     session: Session = Depends(get_session)
-) -> Milestone:
-    milestone = session.get(Milestone, milestone_id)
+) -> MilestoneReadNested:
+    
+    query = select(Milestone).where(Milestone.user_id == current_user.id, Milestone.id == milestone_id)
+    if query is None:
+        raise HTTPException(status_code=404, detail="Query not found")
+    
+    options = []
+    if include_tasks:
+        task_option = selectinload(Milestone.tasks)
+        if include_subtasks:
+            task_option = task_option.options(selectinload(Task.subtasks))
+        else:
+            task_option = task_option.options(noload(Task.subtasks))
+        if include_todos:
+            task_option = task_option.options(selectinload(Task.todos))
+        else:
+            task_option = task_option.options(noload(Task.todos))
+        options.append(task_option)
+    else:
+        options.append(noload(Milestone.tasks))
+    
+    query = query.options(*options)
+    milestone = session.exec(query).first()
+
     if milestone is None or milestone.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Milestone not found")
     return milestone

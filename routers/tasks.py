@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, Depends
-from models import Task, TaskBase, TaskUpdate, get_current_active_user
+from models import Task, TaskBase, TaskUpdate, TaskReadNested, get_current_active_user
 from typing import Annotated
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload, noload
 from routers.users import User
 from db import get_session
 import uuid
@@ -61,9 +62,26 @@ async def update_task(
 async def get_task(
     current_user: Annotated[User, Depends(get_current_active_user)],
     task_id: uuid.UUID,
+    include_subtasks: bool = True,
+    include_todos: bool = True,
     session: Session = Depends(get_session)
-) -> Task:
-    task = session.get(Task, task_id)
+) -> TaskReadNested:
+    query = select(Task).where(current_user.id == Task.user_id, Task.id == task_id)
+    if query is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    options = []
+    
+    if include_subtasks:
+        options.append(selectinload(Task.subtasks))
+    else:
+        options.append(noload(Task.subtasks))
+    if include_todos:
+        options.append(selectinload(Task.todos))
+    else:
+        options.append(noload(Task.todos))
+    query = query.options(*options)
+        
+    task = session.exec(query).first()
     if task is None or task.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     return task

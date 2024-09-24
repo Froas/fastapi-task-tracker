@@ -42,3 +42,14 @@ class TodoUpdate(SQLModel):
     end_datetime: Optional[datetime] = None
     due_date: Optional[datetime] = None
     task_id: Optional[uuid.UUID] = None
+    
+class TodoRead(TodoBase):
+    id: uuid.UUID
+    
+    
+# 24bc30ef-ecf2-42d6-8377-0e1d9d4f9667
+# 702794fa-e8ea-4492-9a8a-523c7ffea078
+# 0c01d895-5fc3-486d-bb5a-ada73f822353
+# 
+# 
+# 

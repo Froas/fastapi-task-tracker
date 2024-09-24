@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 class SubtaskBase(SQLModel):
     title: str
-    descrpition: str
+    description: str
     due_date: Optional[datetime]
     end_datetime: Optional[datetime]
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
@@ -41,5 +41,5 @@ class SubtaskUpdate(SQLModel):
     due_date: Optional[datetime] = None
     task_id: Optional[uuid.UUID] = None
 
-class SubtaskRead(SQLModel):
-    pass
+class SubtaskRead(SubtaskBase):
+    id: uuid.UUID

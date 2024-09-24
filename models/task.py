@@ -8,9 +8,12 @@ import uuid
 if TYPE_CHECKING:
     from .user import User
     from .milestone import Milestone
-    from .todo import Todo
-    from .subtask import Subtask
+    from .todo import Todo, TodoRead
+    from .subtask import Subtask, SubtaskRead
     from .tag import Tag
+    
+from .todo import TodoRead
+from .subtask import SubtaskRead
     
 class TaskBase(SQLModel):
     title: str
@@ -42,3 +45,11 @@ class TaskUpdate(SQLModel):
     status: Optional [StatusType] = None
     due_date: Optional[datetime] = None
     milestone_id: Optional[uuid.UUID] = None
+    
+class TaskRead(TaskBase):
+    pass
+    
+class TaskReadNested(TaskBase):
+    id: uuid.UUID
+    todos: List['TodoRead']
+    subtasks: List['SubtaskRead']

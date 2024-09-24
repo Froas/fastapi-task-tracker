@@ -36,7 +36,7 @@ class Tag(TagBase, table=True):
     todo: 'Todo' = Relationship(back_populates='tags')
     event: 'Event' = Relationship(back_populates='tags')
     
-class TagUpdate:
+class TagUpdate(SQLModel):
     id: uuid.UUID
     name: Optional[str] = None
     color: Optional[str] = None
