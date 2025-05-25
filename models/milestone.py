@@ -21,7 +21,7 @@ class MilestoneBase(SQLModel):
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
     goal_id: Optional[uuid.UUID] = Field(foreign_key='goal.id', default=None)
-    
+    position: int = Field(default=0, index=True) 
     
     # class Config:
     #     arbitrary_types_allowed = True
@@ -55,3 +55,4 @@ class MilestoneUpdate(SQLModel):
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
     goal_id: Optional[uuid.UUID] = None
+    position: Optional[int] = None

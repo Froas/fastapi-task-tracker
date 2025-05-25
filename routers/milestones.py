@@ -22,13 +22,22 @@ async def create_milestone(
     milestone_data: MilestoneBase,
     session: Session = Depends(get_session)
 ) -> Milestone:
+    max_postion = session.exec(
+        select(Milestone.position)
+        .where(Milestone.goal_id == milestone_data.goal_id)
+        .order_by(Milestone.position.desc())
+    ).first()
+    new_postion = (max_postion or 0) + 1 
     milestone = Milestone(
         title=milestone_data.title, 
         description=milestone_data.description, 
         due_date=milestone_data.due_date, 
         user_id=current_user.id, 
         user=current_user, 
-        goal_id=milestone_data.goal_id
+        goal_id=milestone_data.goal_id,
+        position=new_postion,
+        status=milestone_data.status,
+        end_datetime=milestone_data.end_datetime
     )
     session.add(milestone)
     session.commit()
@@ -55,6 +64,24 @@ async def update_milestone(
     session.refresh(milestone)
     return milestone
     
+@milestones_router.put('/user/milestones/reorder')
+async def reorder_milestone(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    reorder_milestones: list[uuid.UUID],
+    session: Session = Depends(get_session)
+) -> dict:
+    milestones = current_user.milestones
+    
+    if len(milestones) != len(reorder_milestone):
+        raise HTTPException(status_code=400, detail="invalid milestone provide")
+
+    for position, milestone_id in enumerate(reorder_milestone, start=1):
+        milestone = next((m for m in milestones if m.id == milestone_id), None)
+        if milestone:
+            milestone.position = position
+            session.add(milestone)
+    session.commit()
+    return {"message": "Milestones reordered successfully"}
 
 @milestones_router.get('/user/milestones/{milestone_id}')
 async def get_milestone(
@@ -101,6 +128,17 @@ async def delete_milestone(
     milestone = session.get(Milestone, milestone_id)
     if milestone is None or milestone.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Milestone not found")
+    
+    delete_postion = milestone.position
     session.delete(milestone)
+    session.commit()
+    session.exec(
+        select(Milestone)
+        .where(
+            Milestone.goal_id == milestone.goal_id,
+            Milestone.position > delete_postion
+        )
+    ).update({Milestone.position: Milestone.position - 1})
+
     session.commit()
     return {"message": "Milestone was deleted successfully"}
