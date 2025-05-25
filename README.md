@@ -64,5 +64,7 @@ alembic upgrade head
 Create a .env file in your project root:
 
 ```bash
-DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/dbname
+ACCESS_TOKEN_EXPIRE_MINUTES = 300
+SECRET_KEY=09d25e094faf7099f6f0f4caa6cf63b88e8d3e7
+ALGORITHM=HS256
 ```
