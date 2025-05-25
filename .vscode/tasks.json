@@ -1,0 +1,15 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "$(gear) Start FastAPI",
+            "type": "shell",
+            "command": "export USERPROFILE='C:/Users/bakho.saldjanov' && export HOME=$USERPROFILE && source venv-fastapi-task/Scripts/activate && uvicorn main:app --reload",
+            "problemMatcher": [],
+            "detail": "Активирует виртуальное окружение и запускает FastAPI."
+        }
+        
+    ]
+}

@@ -11,8 +11,8 @@ __pycache__/
 migrations/versions/*.pyc
 
 # VSCode-specific files
-.vscode/
-.vscode/*
+# .vscode/
+# .vscode/*
 
 # Virtual environments
 venv/
