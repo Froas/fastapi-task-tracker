@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Annotated
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from models import User, UserBase,UserRead, Token, verify_password, create_access_token, get_current_active_user
+from models import User, UserBase, UserRead, Token, verify_password, create_access_token, get_current_active_user, GoogleCalendar
 from sqlmodel import Session, select
 from db import get_session
 from dotenv import load_dotenv
@@ -116,3 +116,22 @@ async def user(
     session.commit()
     return {"message": "User has been deleted successfully"}
     
+
+@users_router.post('/user/google-calendar')
+async def save_google_calendar_token(
+    google_calendar_data: GoogleCalendar,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    session: Session = Depends(get_session)
+) -> dict[str, str]:
+    googleCalendar = GoogleCalendar(
+        user_id=current_user.id,
+        google_user_id=google_calendar_data.google_user_id,
+        access_token=google_calendar_data.access_token,
+        refresh_token=google_calendar_data.refresh_token,
+        expires_at=google_calendar_data.expires_at,
+        user=current_user
+    )
+    session.add(googleCalendar)
+    session.commit()
+    session.refresh(googleCalendar)
+    return {"message": "googleCalendarToken has beed added successfully"}

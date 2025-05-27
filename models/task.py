@@ -42,7 +42,7 @@ class TaskUpdate(SQLModel):
     priority: Optional[PriorityType] = None
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
-    status: Optional [StatusType] = None
+    status: Optional[StatusType] = None
     due_date: Optional[datetime] = None
     milestone_id: Optional[uuid.UUID] = None
     

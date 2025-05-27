@@ -7,6 +7,7 @@ class StatusType(str, Enum):
     FINISHED = "finished"
     CLOSED = "closed"
     ABORTED = "aborted"
+    CANCELLED = "cancelled"
     
 class PriorityType(str, Enum):
     LOW = 'low'

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .event import Event
     from .tag import Tag
     from .subtask import Subtask
+    from .google_calendar import GoogleCalendar
     
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
@@ -43,6 +44,7 @@ class User(UserBase, table=True):
     events: List['Event'] = Relationship(back_populates='user')
     subtasks: List['Subtask'] = Relationship(back_populates='user')
     tags: List['Tag'] = Relationship(back_populates='user')
+    google_token: Optional['GoogleCalendar'] = Relationship(back_populates='user')
 
 
 class UserInDB(UserBase):

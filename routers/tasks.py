@@ -45,6 +45,8 @@ async def update_task(
     currente_user: Annotated[User, Depends(get_current_active_user)],
     session: Session = Depends(get_session)
 ) -> Task:
+    print(task_data)
+    print("debug: update task data")
     task = session.get(Task, task_data.id)
     if not task or task.user_id != currente_user.id:
         raise HTTPException(status_code=404, detail='Tas not found')
@@ -52,7 +54,6 @@ async def update_task(
     update_data = task_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(task, key, value)
-    
     session.add(task)
     session.commit()
     session.refresh(task)
