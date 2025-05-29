@@ -32,6 +32,11 @@ async def get_goal(
     )
     if goal_data.description:
         goal.description = goal_data.description
+    if goal_data.priority:
+        goal.priority = goal_data.priority
+    if goal_data.status:
+        goal.status = goal_data.status
+
     session.add(goal)
     session.commit()
     session.refresh(goal)
