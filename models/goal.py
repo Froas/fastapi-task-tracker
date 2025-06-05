@@ -24,6 +24,14 @@ class GoalBase(SQLModel):
 class GoalRead(GoalBase):
     pass
 
+class GoalCreate(SQLModel):
+    title: str
+    description: Optional[str] = None
+    start_datetime: datetime
+    end_datetime: datetime
+    status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
+    priority: Optional[PriorityType] = Field(default=PriorityType.HIGH)
+
 class Goal(GoalBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)

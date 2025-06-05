@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from models import Goal, GoalBase, GoalUpdate, GoalReadNested, Milestone, Task, User, get_current_active_user
+from models import Goal, GoalBase, GoalUpdate, GoalCreate, GoalReadNested, Milestone, Task, User, get_current_active_user
 from sqlmodel import Session, select
 from typing import Annotated
 from sqlalchemy.orm import selectinload, noload
@@ -19,7 +19,7 @@ async def get_all_goals(
 @goals_router.post('/user/goals')
 async def get_goal(
     current_user: Annotated[User, Depends(get_current_active_user)],
-    goal_data: GoalBase,
+    goal_data: GoalCreate,
     session: Session = Depends(get_session)
 ) -> Goal:
     goal = Goal(

@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field, Relationship
 from passlib.context import CryptContext
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel
 from typing import Optional, TYPE_CHECKING, List
 import uuid
 
@@ -49,3 +49,4 @@ class User(UserBase, table=True):
 
 class UserInDB(UserBase):
     hashed_password: str
+

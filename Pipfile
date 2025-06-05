@@ -41,6 +41,7 @@ typing-extensions = "==4.13.2"
 typing-inspection = "==0.4.0"
 tzdata = "==2025.2"
 uvicorn = "==0.34.2"
+httpx = "*"
 
 [dev-packages]
 

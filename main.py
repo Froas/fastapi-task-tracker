@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import users_router, goals_router, milestones_router, tasks_router, todos_router, events_router, tags_router, subtasks_router
+from routers import users_router, google_calendar_router, goals_router, milestones_router, tasks_router, todos_router, events_router, tags_router, subtasks_router
 
 
 
@@ -26,6 +26,7 @@ app.include_router(tasks_router, tags=['tasks'])
 app.include_router(todos_router, tags=['todos'])
 app.include_router(events_router, tags=['events'])
 app.include_router(tags_router, tags=['tags'])
+app.include_router(google_calendar_router,prefix="/calendars", tags=['calendar integrations'])
 app.include_router(subtasks_router, tags=['subtasks'])
 
 

@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from passlib.context import CryptContext
 from pydantic import EmailStr
+from datetime import datetime
 from typing import Optional, TYPE_CHECKING, List
 import uuid
 
@@ -17,6 +18,9 @@ class GoogleCalendar(GoogleCalendarBase, table=True):
     google_user_id: Optional[uuid.UUID] 
     access_token: str
     refresh_token: str
-    expires_at: str
+    expires_at: datetime = Field()
     user: 'User' = Relationship(back_populates="google_token")
     scopes: Optional[str] = None
+
+class AccessTokenResponse(SQLModel):
+    access_token: str
