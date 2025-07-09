@@ -45,6 +45,10 @@ uvicorn main:app --reload
 **Initialize Alembic (First Time Only):**
 
 ```bash
+alembic upgrade head
+```
+
+```bash
 alembic init alembic
 ```
 
@@ -71,6 +75,7 @@ alembic upgrade head
 Create a `.env` file in your project root with the following keys:
 
 ```env
+```bash
 ACCESS_TOKEN_EXPIRE_MINUTES=
 SECRET_KEY=
 ALGORITHM=
@@ -123,3 +128,4 @@ Contributions, issues, and feature requests are welcome!
 5. Open a Pull Request
 
 Thanks for helping make TaskNest better! 🚀
+```
