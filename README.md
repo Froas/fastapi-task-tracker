@@ -29,6 +29,13 @@ pipenv shell
 pipenv install --dev
 ```
 
+**Initialize Alembic (First Time Only):**
+
+```bash
+alembic upgrade head
+```
+
+
 ### 🚦 Running the Application
 
 Make sure your `.env` file is configured (see example below).
@@ -43,10 +50,6 @@ uvicorn main:app --reload
 ### 🗄️ Database Migrations (Alembic)
 
 **Initialize Alembic (First Time Only):**
-
-```bash
-alembic upgrade head
-```
 
 ```bash
 alembic init alembic
