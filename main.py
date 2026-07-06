@@ -1,6 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import users_router, google_calendar_router, goals_router, milestones_router, tasks_router, todos_router, events_router, tags_router, subtasks_router
+from routers import (
+    users_router,
+    google_calendar_router,
+    goals_router,
+    milestones_router,
+    tasks_router,
+    todos_router,
+    events_router,
+    tags_router,
+    subtasks_router,
+    notes_router,
+    templates_router,
+    trash_router,
+)
 
 
 
@@ -9,6 +22,15 @@ app = FastAPI()
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
+    # Allow fallback dev ports when 3000 is occupied (e.g. by Docker).
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+    "http://localhost:3002",
+    "http://127.0.0.1:3002",
+    "http://localhost:3003",
+    "http://127.0.0.1:3003",
+    "http://localhost:3004",
+    "http://127.0.0.1:3004",
 ]
 
 app.add_middleware(
@@ -28,6 +50,9 @@ app.include_router(events_router, tags=['events'])
 app.include_router(tags_router, tags=['tags'])
 app.include_router(google_calendar_router,prefix="/calendars", tags=['calendar integrations'])
 app.include_router(subtasks_router, tags=['subtasks'])
+app.include_router(notes_router, tags=['notes'])
+app.include_router(templates_router, tags=['templates'])
+app.include_router(trash_router, tags=['trash'])
 
 
 @app.get('/')

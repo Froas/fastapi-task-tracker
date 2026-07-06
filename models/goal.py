@@ -33,9 +33,10 @@ class GoalCreate(SQLModel):
     priority: Optional[PriorityType] = Field(default=PriorityType.HIGH)
 
 class Goal(GoalBase, table=True):
-    id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
+    id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.HIGH)
+    deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='goals')
     milestones: List["Milestone"] = Relationship(back_populates='goal')

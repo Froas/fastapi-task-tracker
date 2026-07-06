@@ -13,8 +13,7 @@ todos_router = APIRouter()
 async def get_all_todo(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Todo]:
-    todo = current_user.todos
-    return todo
+    return [t for t in current_user.todos if t.deleted_at is None]
 
 @todos_router.get('/user/todos/{todo_id}')
 async def get_todo(
@@ -79,9 +78,12 @@ async def delete_todo(
     todo_id: uuid.UUID,
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    from datetime import datetime
+    from utils.timezone import JST
     todo = session.get(Todo, todo_id)
     if todo is None or todo.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Todo not found")
-    session.delete(todo)
+    todo.deleted_at = datetime.now(JST)
+    session.add(todo)
     session.commit()
-    return {"message": "Todo was deleted successfully"}
+    return {"message": "Todo moved to trash"}

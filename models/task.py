@@ -27,8 +27,9 @@ class TaskBase(SQLModel):
 
 class Task(TaskBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
+    deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user: 'User' = Relationship(back_populates='tasks')
-    user_id: uuid.UUID = Field(foreign_key='user.id') 
+    user_id: uuid.UUID = Field(foreign_key='user.id')
     milestone: 'Milestone' = Relationship(back_populates='tasks')
     todos: List['Todo'] = Relationship(back_populates='task')
     subtasks: List['Subtask'] = Relationship(back_populates='task')

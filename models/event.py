@@ -21,6 +21,7 @@ class EventBase(SQLModel):
 class Event(EventBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
     create_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
+    deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='events')
     tags: List['Tag'] = Relationship(back_populates='event')

@@ -7,3 +7,6 @@ from .events import events_router
 from .subtask import subtasks_router
 from .tag import tags_router
 from .google_calendar import google_calendar_router
+from .notes import notes_router
+from .templates import templates_router
+from .trash import trash_router

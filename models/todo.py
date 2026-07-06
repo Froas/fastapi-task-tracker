@@ -25,7 +25,8 @@ class TodoBase(SQLModel):
 
 class Todo(TodoBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
-    user_id: uuid.UUID = Field(foreign_key='user.id')   
+    deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
+    user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='todos')
     task: 'Task' = Relationship(back_populates='todos')
     tags: List['Tag'] = Relationship(back_populates='todo')

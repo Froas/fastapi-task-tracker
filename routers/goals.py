@@ -13,8 +13,8 @@ goals_router = APIRouter()
 async def get_all_goals(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Goal]:
-    goal_list = current_user.goals
-    return goal_list
+    # Filter out soft-deleted (Trash) goals.
+    return [g for g in current_user.goals if g.deleted_at is None]
 
 @goals_router.post('/user/goals')
 async def get_goal(
@@ -109,9 +109,14 @@ async def delete_goal(
     goal_id: uuid.UUID,
     session: Session = Depends(get_session)
 ) -> dict[str, str]:
+    """Soft delete: sets deleted_at. Goal goes to Trash and can be restored
+    via POST /user/trash/goal/{id}/restore. Hard-delete from Trash."""
+    from datetime import datetime
+    from utils.timezone import JST
     goal = session.get(Goal, goal_id)
     if goal is None or goal.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Goal not found")
-    session.delete(goal)
+    goal.deleted_at = datetime.now(JST)
+    session.add(goal)
     session.commit()
-    return {"message": "Goal was deleted successfully"}
+    return {"message": "Goal moved to trash"}

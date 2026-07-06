@@ -13,8 +13,7 @@ events_router = APIRouter()
 async def get_all_event(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Event]:
-    event_list = current_user.events
-    return event_list
+    return [e for e in current_user.events if e.deleted_at is None]
 
 @events_router.post('/user/events')
 async def create_event(
@@ -74,9 +73,12 @@ async def delete_event(
     event_id: uuid.UUID,
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    from datetime import datetime
+    from utils.timezone import JST
     event = session.get(Event, event_id)
     if event is None or event.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Event not found")
-    session.delete(event)
+    event.deleted_at = datetime.now(JST)
+    session.add(event)
     session.commit()
-    return {"message": "Event was deleted successfully"}
+    return {"message": "Event moved to trash"}

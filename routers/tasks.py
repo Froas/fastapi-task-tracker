@@ -13,8 +13,7 @@ tasks_router = APIRouter()
 async def get_all_task(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Task]:
-    task_list = current_user.tasks
-    return task_list
+    return [t for t in current_user.tasks if t.deleted_at is None]
 
 @tasks_router.post('/user/tasks')
 async def create_task(
@@ -93,9 +92,12 @@ async def delete_task(
     task_id: uuid.UUID,
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    from datetime import datetime
+    from utils.timezone import JST
     task = session.get(Task, task_id)
     if task is None or task.user_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Task  not found")
-    session.delete(task)
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.deleted_at = datetime.now(JST)
+    session.add(task)
     session.commit()
-    return {"message": "Task was deleted successfully"}
+    return {"message": "Task moved to trash"}

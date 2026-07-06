@@ -5,7 +5,11 @@ from sqlalchemy import pool
 from sqlmodel import SQLModel
 from pathlib import Path
 from alembic import context
-from models import User
+# Import every model so SQLModel.metadata sees them when autogenerating.
+from models import (
+    User, Goal, Milestone, Task, Subtask, Todo, Event, Tag,
+    Note, Template, GoogleCalendar,
+)
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config

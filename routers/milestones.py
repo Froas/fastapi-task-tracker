@@ -13,8 +13,7 @@ milestones_router = APIRouter()
 async def get_all_milestone(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[Milestone]:
-    milestone_list = current_user.milestones
-    return milestone_list
+    return [m for m in current_user.milestones if m.deleted_at is None]
 
 @milestones_router.post('/user/milestones')
 async def create_milestone(
@@ -125,28 +124,17 @@ async def delete_milestone(
     milestone_id: uuid.UUID,
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    # Soft delete: marks deleted_at and skips the position-shift that
+    # hard-delete would have done. Restoring from Trash puts the milestone
+    # back at its original position; if that position is taken, the user
+    # can drag-reorder. (Position shifts on hard-delete happen in trash
+    # router's purge.)
+    from datetime import datetime
+    from utils.timezone import JST
     milestone = session.get(Milestone, milestone_id)
     if milestone is None or milestone.user_id != current_user.id:
         raise HTTPException(status_code=404, detail="Milestone not found")
-    
-    delete_position = milestone.position
-    goal_id = milestone.goal_id
-    
-    session.delete(milestone)
+    milestone.deleted_at = datetime.now(JST)
+    session.add(milestone)
     session.commit()
-    
-    # Update positions of remaining milestones
-    milestones_to_update = session.exec(
-        select(Milestone)
-        .where(
-            Milestone.goal_id == goal_id,
-            Milestone.position > delete_position
-        )
-    ).all()
-    
-    for m in milestones_to_update:
-        m.position -= 1
-        session.add(m)
-    
-    session.commit()
-    return {"message": "Milestone was deleted successfully"}
+    return {"message": "Milestone moved to trash"}

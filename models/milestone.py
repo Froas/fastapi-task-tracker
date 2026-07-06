@@ -27,7 +27,8 @@ class MilestoneBase(SQLModel):
     #     arbitrary_types_allowed = True
 
 class Milestone(MilestoneBase, table=True):
-    id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
+    id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
+    deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='milestones')
     goal: 'Goal' = Relationship(back_populates='milestones')
