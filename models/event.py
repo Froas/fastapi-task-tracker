@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, TYPE_CHECKING, List
 from datetime import datetime
 from utils.timezone import JST
+from .enums import StatusType
 import uuid
 
 if TYPE_CHECKING:
@@ -12,11 +13,12 @@ if TYPE_CHECKING:
 class EventBase(SQLModel):
     title: str
     description: Optional[str] = None
-    start_datetime: Optional[datetime]
-    end_datetime: Optional[datetime]
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     event_type: Optional[str] = None
     location: Optional[str] = None
-    recurrence_rule: Optional[str] = None  # Правила повторения в формате RFC 5545 Библиотеки для обработки RRULE:
+    recurrence_rule: Optional[str] = None
+    status: StatusType = Field(default=StatusType.OUTSTANDING)
 
 class Event(EventBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
@@ -36,3 +38,4 @@ class EventUpdate(SQLModel):
     event_type: Optional[str] = None
     location: Optional[str] = None
     recurrence_rule: Optional[str] = None
+    status: Optional[StatusType] = None

@@ -12,8 +12,14 @@ events_router = APIRouter()
 @events_router.get('/user/events')
 async def get_all_event(
     current_user: Annotated[User, Depends(get_current_active_user)],
+    session: Session = Depends(get_session),
 ) -> list[Event]:
-    return [e for e in current_user.events if e.deleted_at is None]
+    return session.exec(
+        select(Event).where(
+            Event.user_id == current_user.id,
+            Event.deleted_at.is_(None),
+        )
+    ).all()
 
 @events_router.post('/user/events')
 async def create_event(
@@ -29,6 +35,7 @@ async def create_event(
         event_type=event_data.event_type,
         recurrence_rule=event_data.recurrence_rule,
         location=event_data.location,
+        status=event_data.status,
         user=current_user,
         user_id=current_user.id
     )
@@ -44,10 +51,10 @@ async def update_event(
     session: Session = Depends(get_session)
 ) -> Event:
     event = session.get(Event, event_data.id)
-    if not event or event.user_id != current_user.id:
+    if not event or event.user_id != current_user.id or event.deleted_at is not None:
         raise HTTPException(status_code=404, detail='Event not found')
     
-    update_data = event_data.model_dump(exclude_unset=True)
+    update_data = event_data.model_dump(exclude_unset=True, exclude={'id'})
     for key, value in update_data.items():
         setattr(event, key, value)
     
@@ -63,7 +70,7 @@ async def get_event(
     session: Session = Depends(get_session)
 ) -> Event:
     event = session.get(Event, event_id)
-    if event is None or event.user_id != current_user.id:
+    if event is None or event.user_id != current_user.id or event.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Event not found")
     return event
 
@@ -76,7 +83,7 @@ async def delete_event(
     from datetime import datetime
     from utils.timezone import JST
     event = session.get(Event, event_id)
-    if event is None or event.user_id != current_user.id:
+    if event is None or event.user_id != current_user.id or event.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Event not found")
     event.deleted_at = datetime.now(JST)
     session.add(event)

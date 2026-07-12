@@ -1,5 +1,5 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List, TYPE_CHECKING
+from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from typing import Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 from utils.timezone import JST
 from .enums import StatusType, PriorityType
@@ -14,14 +14,15 @@ if TYPE_CHECKING:
 from .task import TaskReadNested
 class MilestoneBase(SQLModel):
     title: str
-    description: str
-    due_date: Optional[datetime]
-    end_datetime: Optional[datetime]
+    description: str = ''
+    due_date: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
     goal_id: Optional[uuid.UUID] = Field(foreign_key='goal.id', default=None)
     position: int = Field(default=0, index=True) 
+    completion_rule: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     
     # class Config:
     #     arbitrary_types_allowed = True
@@ -37,7 +38,7 @@ class Milestone(MilestoneBase, table=True):
 
 class MilestoneReadNested(MilestoneBase):
     id: uuid.UUID
-    tasks: Optional[List['TaskReadNested']] = []
+    tasks: List['TaskReadNested'] = Field(default_factory=list)
     # class Config:
     #     arbitrary_types_allowed = True
     
@@ -57,3 +58,8 @@ class MilestoneUpdate(SQLModel):
     end_datetime: Optional[datetime] = None
     goal_id: Optional[uuid.UUID] = None
     position: Optional[int] = None
+    completion_rule: Optional[dict[str, Any]] = None
+
+
+class MilestoneReorderRequest(SQLModel):
+    milestone_ids: List[uuid.UUID]

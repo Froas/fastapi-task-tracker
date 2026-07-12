@@ -13,6 +13,11 @@ from routers import (
     notes_router,
     templates_router,
     trash_router,
+    backup_router,
+    daily_draft_todos_router,
+    daily_logs_router,
+    todo_occurrences_router,
+    metrics_router,
 )
 
 
@@ -53,12 +58,13 @@ app.include_router(subtasks_router, tags=['subtasks'])
 app.include_router(notes_router, tags=['notes'])
 app.include_router(templates_router, tags=['templates'])
 app.include_router(trash_router, tags=['trash'])
+app.include_router(backup_router, tags=['backup'])
+app.include_router(daily_draft_todos_router, tags=['daily draft todos'])
+app.include_router(daily_logs_router, tags=['daily logs'])
+app.include_router(todo_occurrences_router, tags=['todo occurrences'])
+app.include_router(metrics_router, tags=['metrics'])
 
 
 @app.get('/')
 async def root() -> dict[str, str]:
     return {'message': 'Hello world'}
-
-
-
-

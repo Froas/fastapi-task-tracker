@@ -13,6 +13,10 @@ class NoteBase(SQLModel):
     body: Optional[str] = None
     tag: Optional[str] = None  # free-form text tag for color/category grouping
     pinned: bool = Field(default=False)
+    kind: str = Field(default="note")  # note | signal
+    source: Optional[str] = None
+    goal_id: Optional[uuid.UUID] = Field(default=None, foreign_key='goal.id')
+    task_id: Optional[uuid.UUID] = Field(default=None, foreign_key='task.id')
 
 
 class NoteCreate(SQLModel):
@@ -20,6 +24,10 @@ class NoteCreate(SQLModel):
     body: Optional[str] = None
     tag: Optional[str] = None
     pinned: bool = False
+    kind: str = "note"
+    source: Optional[str] = None
+    goal_id: Optional[uuid.UUID] = None
+    task_id: Optional[uuid.UUID] = None
 
 
 class NoteUpdate(SQLModel):
@@ -28,6 +36,10 @@ class NoteUpdate(SQLModel):
     body: Optional[str] = None
     tag: Optional[str] = None
     pinned: Optional[bool] = None
+    kind: Optional[str] = None
+    source: Optional[str] = None
+    goal_id: Optional[uuid.UUID] = None
+    task_id: Optional[uuid.UUID] = None
 
 
 class Note(NoteBase, table=True):

@@ -15,6 +15,11 @@ if TYPE_CHECKING:
     from .google_calendar import GoogleCalendar
     from .note import Note
     from .template import Template
+    from .daily_draft_todo import DailyDraftTodo
+    from .daily_log import DailyLog
+    from .todo_occurrence import TodoOccurrence
+    from .metric_definition import MetricDefinition
+    from .metric_entry import MetricEntry
 
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 
@@ -40,6 +45,7 @@ class UserRead(SQLModel):
     id: uuid.UUID
     username: str
     email: EmailStr
+    preferred_theme: Optional[str] = None
     
 class User(UserBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
@@ -52,15 +58,20 @@ class User(UserBase, table=True):
     tags: List['Tag'] = Relationship(back_populates='user')
     notes: List['Note'] = Relationship(back_populates='user')
     templates: List['Template'] = Relationship(back_populates='user')
+    daily_draft_todos: List['DailyDraftTodo'] = Relationship(back_populates='user')
+    daily_logs: List['DailyLog'] = Relationship(back_populates='user')
+    todo_occurrences: List['TodoOccurrence'] = Relationship(back_populates='user')
+    metric_definitions: List['MetricDefinition'] = Relationship(back_populates='user')
+    metric_entries: List['MetricEntry'] = Relationship(back_populates='user')
     google_token: Optional['GoogleCalendar'] = Relationship(back_populates='user')
 
 
 class UserUpdate(SQLModel):
-    """Patchable user fields. Username/email/password go through dedicated
-    endpoints; this is for non-identity profile bits."""
+    id: Optional[uuid.UUID] = None
+    username: Optional[str] = None
+    email: Optional[EmailStr] = None
     preferred_theme: Optional[str] = None
 
 
 class UserInDB(UserBase):
     hashed_password: str
-

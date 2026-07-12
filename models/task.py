@@ -1,5 +1,5 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List, TYPE_CHECKING
+from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from typing import Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 from .enums import StatusType, PriorityType
 from utils.timezone import JST
@@ -7,6 +7,7 @@ import uuid
 
 if TYPE_CHECKING:
     from .user import User
+    from .goal import Goal
     from .milestone import Milestone
     from .todo import Todo, TodoRead
     from .subtask import Subtask, SubtaskRead
@@ -17,20 +18,27 @@ from .subtask import SubtaskRead
     
 class TaskBase(SQLModel):
     title: str
-    description: str
-    due_date: Optional[datetime]
-    end_datetime: Optional[datetime]
+    description: str = ''
+    due_date: Optional[datetime] = None
+    scheduled_date: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
+    goal_id: Optional[uuid.UUID] = Field(foreign_key='goal.id', default=None)
     milestone_id: Optional[uuid.UUID] = Field(foreign_key='milestone.id', default=None)
+    kind: str = Field(default='project')
+    scope: str = Field(default='milestone')
+    position: int = Field(default=0, index=True)
+    completion_rule: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
 class Task(TaskBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
     deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user: 'User' = Relationship(back_populates='tasks')
     user_id: uuid.UUID = Field(foreign_key='user.id')
-    milestone: 'Milestone' = Relationship(back_populates='tasks')
+    goal: Optional['Goal'] = Relationship(back_populates='tasks')
+    milestone: Optional['Milestone'] = Relationship(back_populates='tasks')
     todos: List['Todo'] = Relationship(back_populates='task')
     subtasks: List['Subtask'] = Relationship(back_populates='task')
     tags: List['Tag'] = Relationship(back_populates='task')
@@ -45,12 +53,22 @@ class TaskUpdate(SQLModel):
     end_datetime: Optional[datetime] = None
     status: Optional[StatusType] = None
     due_date: Optional[datetime] = None
+    scheduled_date: Optional[datetime] = None
+    goal_id: Optional[uuid.UUID] = None
     milestone_id: Optional[uuid.UUID] = None
+    kind: Optional[str] = None
+    scope: Optional[str] = None
+    position: Optional[int] = None
+    completion_rule: Optional[dict[str, Any]] = None
     
 class TaskRead(TaskBase):
     pass
     
 class TaskReadNested(TaskBase):
     id: uuid.UUID
-    todos: List['TodoRead']
-    subtasks: List['SubtaskRead']
+    todos: List['TodoRead'] = Field(default_factory=list)
+    subtasks: List['SubtaskRead'] = Field(default_factory=list)
+
+
+class TaskReorderRequest(SQLModel):
+    task_ids: List[uuid.UUID]

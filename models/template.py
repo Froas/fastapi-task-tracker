@@ -1,9 +1,19 @@
 """Goal templates: pre-built blueprints a user can instantiate into a
-real goal+milestones+tasks tree. The blueprint is stored as a JSON
-payload (the design's templates page uses {milestones:[{title, tasks:[{title}]}]}).
+real goal/milestone/task/subtask/todo/metric tree.
 
-Instantiation is a POST that copies the blueprint into real Goal/
-Milestone/Task rows owned by the calling user."""
+Blueprint v2 shape:
+{
+  "goal_tasks": [{"title", "kind", "todos", "subtasks", "metrics"}],
+  "metrics": [{"name", "unit", "input_type", "show_on_today"}],
+  "milestones": [{
+    "title", "description", "tasks": [{
+      "title", "kind", "subtasks", "todos", "metrics"
+    }]
+  }]
+}
+
+Legacy blueprints with {milestones:[{tasks:[{title}]}]} are still accepted,
+but they only create project tasks and no recurring Today definitions."""
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 from typing import Optional, List, Any, TYPE_CHECKING
@@ -58,6 +68,13 @@ class TemplateRead(TemplateBase):
 class TemplateInstantiate(SQLModel):
     """POST body for /user/templates/{id}/instantiate.
     Optional overrides at instantiation time."""
+    title_override: Optional[str] = None
+    start_datetime: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
+
+
+class TemplateInstantiateBlueprint(TemplateCreate):
+    """POST body for materialising an unsaved blueprint."""
     title_override: Optional[str] = None
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None

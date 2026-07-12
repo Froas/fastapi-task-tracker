@@ -10,3 +10,8 @@ from .google_calendar import google_calendar_router
 from .notes import notes_router
 from .templates import templates_router
 from .trash import trash_router
+from .backup import backup_router
+from .daily_draft_todos import daily_draft_todos_router
+from .daily_logs import daily_logs_router
+from .todo_occurrences import todo_occurrences_router
+from .metrics import metrics_router

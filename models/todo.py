@@ -10,14 +10,15 @@ if TYPE_CHECKING:
     from .user import User
     from .task import Task
     from .tag import Tag
+    from .todo_occurrence import TodoOccurrence
     
 class TodoBase(SQLModel):
     title: str
-    description: str
-    repeat_interval: Optional[str]
-    due_date: Optional[datetime]
-    next_due_date: Optional[datetime]
-    end_datetime: Optional[datetime]
+    description: str = ''
+    repeat_interval: Optional[str] = None
+    due_date: Optional[datetime] = None
+    next_due_date: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
@@ -25,11 +26,13 @@ class TodoBase(SQLModel):
 
 class Todo(TodoBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
+    position: int = Field(default=0, index=True)
     deleted_at: Optional[datetime] = Field(default=None)  # soft delete (Trash)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='todos')
     task: 'Task' = Relationship(back_populates='todos')
     tags: List['Tag'] = Relationship(back_populates='todo')
+    occurrences: List['TodoOccurrence'] = Relationship(back_populates='todo')
 
 class TodoUpdate(SQLModel):
     id: uuid.UUID
@@ -43,14 +46,11 @@ class TodoUpdate(SQLModel):
     end_datetime: Optional[datetime] = None
     due_date: Optional[datetime] = None
     task_id: Optional[uuid.UUID] = None
+    position: Optional[int] = None
     
 class TodoRead(TodoBase):
     id: uuid.UUID
-    
-    
-# 24bc30ef-ecf2-42d6-8377-0e1d9d4f9667
-# 702794fa-e8ea-4492-9a8a-523c7ffea078
-# 0c01d895-5fc3-486d-bb5a-ada73f822353
-# 
-# 
-# 
+    position: int = 0
+
+class TodoReorderRequest(SQLModel):
+    todo_ids: List[uuid.UUID]

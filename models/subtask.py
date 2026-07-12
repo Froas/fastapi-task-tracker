@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 class SubtaskBase(SQLModel):
     title: str
-    description: str
-    due_date: Optional[datetime]
-    end_datetime: Optional[datetime]
+    description: str = ''
+    due_date: Optional[datetime] = None
+    end_datetime: Optional[datetime] = None
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.LOW)
@@ -24,6 +24,7 @@ class SubtaskBase(SQLModel):
 
 class Subtask(SubtaskBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
+    position: int = Field(default=0, index=True)
     user_id: uuid.UUID = Field(foreign_key='user.id')
     user: 'User' = Relationship(back_populates='subtasks')
     task: 'Task' = Relationship(back_populates='subtasks')
@@ -40,6 +41,11 @@ class SubtaskUpdate(SQLModel):
     status: Optional [StatusType] = None
     due_date: Optional[datetime] = None
     task_id: Optional[uuid.UUID] = None
+    position: Optional[int] = None
 
 class SubtaskRead(SubtaskBase):
     id: uuid.UUID
+    position: int = 0
+
+class SubtaskReorderRequest(SQLModel):
+    subtask_ids: List[uuid.UUID]

@@ -9,6 +9,12 @@ from db import get_session
 from utils.timezone import JST
 
 notes_router = APIRouter()
+VALID_NOTE_KINDS = {"note", "signal"}
+
+
+def _note_kind(value: str | None) -> str:
+    normalized = (value or "note").strip().lower()
+    return normalized if normalized in VALID_NOTE_KINDS else "note"
 
 
 @notes_router.get('/user/notes')
@@ -37,6 +43,10 @@ async def create_note(
         body=note_data.body,
         tag=note_data.tag,
         pinned=note_data.pinned,
+        kind=_note_kind(note_data.kind),
+        source=note_data.source,
+        goal_id=note_data.goal_id,
+        task_id=note_data.task_id,
         user_id=current_user.id,
     )
     session.add(note)
@@ -55,6 +65,8 @@ async def update_note(
     if note is None or note.user_id != current_user.id or note.deleted_at is not None:
         raise HTTPException(status_code=404, detail="Note not found")
     update_data = note_data.model_dump(exclude_unset=True, exclude={"id"})
+    if "kind" in update_data:
+        update_data["kind"] = _note_kind(update_data["kind"])
     for key, value in update_data.items():
         setattr(note, key, value)
     note.updated_at = datetime.now(JST)

@@ -8,7 +8,8 @@ from alembic import context
 # Import every model so SQLModel.metadata sees them when autogenerating.
 from models import (
     User, Goal, Milestone, Task, Subtask, Todo, Event, Tag,
-    Note, Template, GoogleCalendar,
+    Note, Template, DailyDraftTodo, DailyLog, TodoOccurrence,
+    MetricDefinition, MetricEntry, GoogleCalendar,
 )
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

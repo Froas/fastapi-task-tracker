@@ -47,6 +47,20 @@ uvicorn main:app --reload
 * Change `main:app` if your entrypoint or FastAPI instance is named differently.
 * `--reload` enables live code reloading for development.
 
+### 🔑 Resetting a Local User Password
+
+Passwords are stored as bcrypt hashes and cannot be recovered. To set a new
+password while preserving the user's tasks and other data, run this command
+from the backend directory:
+
+```bash
+pipenv run python -c 'from sqlmodel import Session,select; from db import engine; from models import User; s=Session(engine); u=s.exec(select(User).where(User.username=="naruto")).one(); u.set_password("naruto"); s.add(u); s.commit()'
+```
+
+Afterward, sign in with username `naruto` and password `naruto`.
+Replace both values in the command when resetting another user or choosing a
+different password. Restart the backend if it is already running.
+
 ### 🗄️ Database Migrations (Alembic)
 
 **Initialize Alembic (First Time Only):**

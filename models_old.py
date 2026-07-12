@@ -28,7 +28,7 @@ class EventBase(SQLModel):
     end_datetime: datetime
     event_type: Optional[str] = None
     location: Optional[str] = None
-    recurrence_rule: Optional[str] = None  # Правила повторения в формате RFC 5545 Библиотеки для обработки RRULE:
+    recurrence_rule: Optional[str] = None
 
 class Event(EventBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)

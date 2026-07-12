@@ -2,16 +2,17 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Annotated
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from models import User, UserBase, UserRead, UserUpdate, Token, verify_password, create_access_token, get_current_active_user, GoogleCalendar
+from models import User, UserBase, UserRead, UserUpdate, Token, verify_password, create_access_token, get_current_active_user
 from sqlmodel import Session, select
 from db import get_session
 from dotenv import load_dotenv
+from sqlalchemy.exc import IntegrityError
 import uuid
 import os
  
 load_dotenv()
 
-ACCESS_TOKEN_EXPIRE_MINUTES = os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES')
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
 
 
 def authenticate_user(session: Session, username: str, password: str):
@@ -24,10 +25,42 @@ def authenticate_user(session: Session, username: str, password: str):
         return False
     return user
 
+
+def apply_user_update(user: User, payload: UserUpdate, session: Session) -> User:
+    update_data = payload.model_dump(exclude_unset=True, exclude={'id'})
+    if 'username' in update_data:
+        existing = session.exec(
+            select(User).where(
+                User.username == update_data['username'],
+                User.id != user.id,
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Username already taken")
+    if 'email' in update_data:
+        existing = session.exec(
+            select(User).where(
+                User.email == update_data['email'],
+                User.id != user.id,
+            )
+        ).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+    for key, value in update_data.items():
+        setattr(user, key, value)
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError:
+        session.rollback()
+        raise HTTPException(status_code=409, detail="Username or email already in use")
+    session.refresh(user)
+    return user
+
 users_router = APIRouter()
 
 
-@users_router.get('/me', response_model=User)
+@users_router.get('/me', response_model=UserRead)
 async def read_users_me(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
@@ -35,30 +68,30 @@ async def read_users_me(
 
 @users_router.get('/')
 async def user(
-    session: Session = Depends(get_session)
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> list[UserRead]:
-    user_list = session.exec(select(User)).all()
-    print(f'ALl users{user_list}')
-    return user_list
+    return [current_user]
 
 
 
 @users_router.get('/{user_id}')
 async def user(
     user_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     session: Session = Depends(get_session),
 ) -> UserRead:
+    if user_id != current_user.id:
+        raise HTTPException(status_code=404, detail="User not found")
     user = session.get(User, user_id)
     if user is None:
-        raise HTTPException(status_code=404, detail="Event has not found")
+        raise HTTPException(status_code=404, detail="User not found")
     return user
 
-@users_router.post('/')
+@users_router.post('/', response_model=UserRead)
 async def user(
     user_data: UserBase,
     session: Session = Depends(get_session)
-) -> User:
-    from sqlalchemy.exc import IntegrityError
+) -> UserRead:
     # Pre-check for a friendlier error than a raw IntegrityError trace.
     existing = session.exec(select(User).where(User.username == user_data.username)).first()
     if existing:
@@ -79,22 +112,18 @@ async def user(
     return user
 
 
-@users_router.patch('/update')
+@users_router.patch('/update', response_model=UserRead)
 async def user(
-    user_data: User,
+    user_data: UserUpdate,
     current_user: Annotated[User, Depends(get_current_active_user)],
     session: Session = Depends(get_session),
 ) -> UserRead:
-    user_id = uuid.UUID(user_data.id)
-    user = session.get(User, user_id)
-    if user is not None & user.id != current_user.id:
-        raise HTTPException(status_code=404, detail="User has not founded")
-    if user_data.username is not None:
-        user.username = user_data.username
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    return user
+    if user_data.id is not None and user_data.id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot update another user")
+    user = session.get(User, current_user.id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return apply_user_update(user, user_data, session)
 
 
 @users_router.post('/token')
@@ -105,11 +134,11 @@ async def login_for_access_token(
     user: User  = authenticate_user(session=session, password=form_data.password, username=form_data.username)
     if not user:
         raise HTTPException(
-            status_code=404,  
+            status_code=401,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=int(ACCESS_TOKEN_EXPIRE_MINUTES))
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": str(user.id)},
         expires_delta=access_token_expires
@@ -118,7 +147,7 @@ async def login_for_access_token(
 
 
 
-@users_router.patch('/me', response_model=User)
+@users_router.patch('/me', response_model=UserRead)
 async def update_me(
     payload: UserUpdate,
     current_user: Annotated[User, Depends(get_current_active_user)],
@@ -129,24 +158,22 @@ async def update_me(
     user = session.get(User, current_user.id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    data = payload.model_dump(exclude_unset=True)
-    for key, value in data.items():
-        setattr(user, key, value)
-    session.add(user)
-    session.commit()
-    session.refresh(user)
-    return user
+    if payload.id is not None and payload.id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot update another user")
+    return apply_user_update(user, payload, session)
 
 
 @users_router.delete('/{user_id}/delete')
 async def user(
     user_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_active_user)],
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
+    if user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Cannot delete another user")
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User has not found")
     session.delete(user)
     session.commit()
     return {"message": "User has been deleted successfully"}
-
