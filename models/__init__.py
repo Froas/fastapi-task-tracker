@@ -14,5 +14,5 @@ from .daily_log import DailyLog, DailyLogBase, DailyLogCreate, DailyLogUpdate, D
 from .todo_occurrence import TodoOccurrence, TodoOccurrenceBase, TodoOccurrenceUpdate, TodoOccurrenceRead
 from .metric_definition import MetricDefinition, MetricDefinitionBase, MetricDefinitionCreate, MetricDefinitionUpdate, MetricDefinitionRead, TodayMetricRead
 from .metric_entry import MetricEntry, MetricEntryBase, MetricEntryUpsert, MetricEntryRead
-from .enums import StatusType, PriorityType
+from .enums import StatusType, PriorityType, JourneyCharacterId, JourneyThemeId
 from .google_calendar import GoogleCalendar, AccessTokenResponse

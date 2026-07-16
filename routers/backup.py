@@ -10,10 +10,14 @@ from utils.timezone import JST
 from models import (
     Event,
     DailyLog,
+    DailyDraftTodo,
     Goal,
+    JourneyCharacterId,
+    JourneyThemeId,
     MetricDefinition,
     MetricEntry,
     Milestone,
+    Note,
     PriorityType,
     StatusType,
     Subtask,
@@ -101,6 +105,9 @@ class BackupGoal(BaseModel):
     priority: PriorityType | None = PriorityType.LOW
     position: int | None = 0
     completion_rule: dict | None = None
+    enforce_sequential_milestones: bool = False
+    journey_theme_id: JourneyThemeId = JourneyThemeId.MOUNTAIN
+    journey_character_id: JourneyCharacterId = JourneyCharacterId.BAT
     tasks: list[BackupTask] = Field(default_factory=list)
     milestones: list[BackupMilestone] = Field(default_factory=list)
 
@@ -136,6 +143,7 @@ class BackupTodoOccurrence(BaseModel):
     value: str | None = None
     note: str | None = None
     completed_at: datetime | None = None
+    is_focus: bool | None = False
     todo_id: str | None = None
     daily_log_id: str | None = None
 
@@ -161,6 +169,38 @@ class BackupMetricEntry(BaseModel):
     daily_log_id: str | None = None
 
 
+class BackupNote(BaseModel):
+    id: str | None = None
+    title: str
+    body: str | None = None
+    tag: str | None = None
+    pinned: bool = False
+    kind: str = "note"
+    source: str | None = None
+    goal_id: str | None = None
+    task_id: str | None = None
+    signal_domain: str | None = None
+    signal_stake: str | None = None
+    signal_decision: str | None = None
+    next_action: str | None = None
+    review_date: Date | None = None
+    deadline: Date | None = None
+    outcome: str | None = None
+    resolved_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class BackupDailyDraftTodo(BaseModel):
+    id: str | None = None
+    title: str
+    day: Date
+    done: bool = False
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
 class BackupPayload(BaseModel):
     version: Literal[1]
     exportedAt: str | datetime | None = None
@@ -174,6 +214,8 @@ class BackupPayload(BaseModel):
     todo_occurrences: list[BackupTodoOccurrence] = Field(default_factory=list)
     metric_definitions: list[BackupMetricDefinition] = Field(default_factory=list)
     metric_entries: list[BackupMetricEntry] = Field(default_factory=list)
+    notes: list[BackupNote] = Field(default_factory=list)
+    daily_draft_todos: list[BackupDailyDraftTodo] = Field(default_factory=list)
 
 
 def _key(value: object | None) -> str | None:
@@ -284,6 +326,9 @@ def _serialize_goal(
         'priority': _priority(goal.priority),
         'position': goal.position or 0,
         'completion_rule': goal.completion_rule,
+        'enforce_sequential_milestones': goal.enforce_sequential_milestones,
+        'journey_theme_id': goal.journey_theme_id,
+        'journey_character_id': goal.journey_character_id,
         'tasks': tasks_by_goal.get(goal_id, []),
         'milestones': milestones_by_goal.get(goal_id, []),
     }
@@ -325,6 +370,7 @@ def _serialize_todo_occurrence(occurrence: TodoOccurrence) -> dict:
         'value': occurrence.value,
         'note': occurrence.note,
         'completed_at': occurrence.completed_at,
+        'is_focus': occurrence.is_focus,
         'todo_id': str(occurrence.todo_id) if occurrence.todo_id else None,
         'daily_log_id': str(occurrence.daily_log_id) if occurrence.daily_log_id else None,
     }
@@ -352,6 +398,42 @@ def _serialize_metric_entry(entry: MetricEntry) -> dict:
         'note': entry.note,
         'metric_definition_id': str(entry.metric_definition_id) if entry.metric_definition_id else None,
         'daily_log_id': str(entry.daily_log_id) if entry.daily_log_id else None,
+    }
+
+
+def _serialize_note(note: Note) -> dict:
+    return {
+        'id': str(note.id),
+        'title': note.title,
+        'body': note.body,
+        'tag': note.tag,
+        'pinned': note.pinned,
+        'kind': note.kind,
+        'source': note.source,
+        'goal_id': str(note.goal_id) if note.goal_id else None,
+        'task_id': str(note.task_id) if note.task_id else None,
+        'signal_domain': note.signal_domain,
+        'signal_stake': note.signal_stake,
+        'signal_decision': note.signal_decision,
+        'next_action': note.next_action,
+        'review_date': note.review_date,
+        'deadline': note.deadline,
+        'outcome': note.outcome,
+        'resolved_at': note.resolved_at,
+        'created_at': note.created_at,
+        'updated_at': note.updated_at,
+    }
+
+
+def _serialize_daily_draft_todo(todo: DailyDraftTodo) -> dict:
+    return {
+        'id': str(todo.id),
+        'title': todo.title,
+        'day': todo.day,
+        'done': todo.done,
+        'created_at': todo.created_at,
+        'updated_at': todo.updated_at,
+        'completed_at': todo.completed_at,
     }
 
 
@@ -450,6 +532,21 @@ async def export_backup(
         .order_by(MetricEntry.date, MetricEntry.id)
     ).all() if metric_definition_ids and daily_log_ids else []
 
+    notes = session.exec(
+        select(Note)
+        .where(Note.user_id == current_user.id, Note.deleted_at.is_(None))
+        .order_by(Note.created_at, Note.id)
+    ).all()
+
+    daily_draft_todos = session.exec(
+        select(DailyDraftTodo)
+        .where(
+            DailyDraftTodo.user_id == current_user.id,
+            DailyDraftTodo.deleted_at.is_(None),
+        )
+        .order_by(DailyDraftTodo.day, DailyDraftTodo.created_at, DailyDraftTodo.id)
+    ).all()
+
     todos_by_task: dict[str, list[dict]] = {}
     for todo in todos:
         if todo.task_id:
@@ -498,6 +595,8 @@ async def export_backup(
         'todo_occurrences': [_serialize_todo_occurrence(occurrence) for occurrence in todo_occurrences],
         'metric_definitions': [_serialize_metric_definition(metric) for metric in metric_definitions],
         'metric_entries': [_serialize_metric_entry(entry) for entry in metric_entries],
+        'notes': [_serialize_note(note) for note in notes],
+        'daily_draft_todos': [_serialize_daily_draft_todo(todo) for todo in daily_draft_todos],
     }
 
 
@@ -524,6 +623,8 @@ async def import_backup(
         'todo_occurrences': 0,
         'metric_definitions': 0,
         'metric_entries': 0,
+        'notes': 0,
+        'daily_draft_todos': 0,
     }
     skipped = {
         'milestones': 0,
@@ -543,6 +644,8 @@ async def import_backup(
         'metric_definitions': set(),
         'metric_entries': set(),
         'todo_occurrences': set(),
+        'notes': set(),
+        'daily_draft_todos': set(),
     }
 
     def already_seen(kind: str, item_id: str | None) -> bool:
@@ -696,6 +799,9 @@ async def import_backup(
                 priority=goal_data.priority or PriorityType.LOW,
                 position=goal_data.position or 0,
                 completion_rule=goal_data.completion_rule,
+                enforce_sequential_milestones=goal_data.enforce_sequential_milestones,
+                journey_theme_id=goal_data.journey_theme_id,
+                journey_character_id=goal_data.journey_character_id,
                 user_id=current_user.id,
                 user=current_user,
             )
@@ -808,6 +914,7 @@ async def import_backup(
                 value=occurrence_data.value,
                 note=occurrence_data.note,
                 completed_at=occurrence_data.completed_at,
+                is_focus=occurrence_data.is_focus or False,
                 todo_id=new_todo_id,
                 daily_log_id=new_daily_log_id,
                 user_id=current_user.id,
@@ -837,6 +944,52 @@ async def import_backup(
             )
             session.add(entry)
             imported['metric_entries'] += 1
+
+        for note_data in payload.notes:
+            note_key = _key(note_data.id)
+            if already_seen('notes', note_key):
+                continue
+            note = Note(
+                title=note_data.title,
+                body=note_data.body,
+                tag=note_data.tag,
+                pinned=note_data.pinned,
+                kind=note_data.kind,
+                source=note_data.source,
+                goal_id=goal_id_map.get(note_data.goal_id or ''),
+                task_id=task_id_map.get(note_data.task_id or ''),
+                signal_domain=note_data.signal_domain,
+                signal_stake=note_data.signal_stake,
+                signal_decision=note_data.signal_decision,
+                next_action=note_data.next_action,
+                review_date=note_data.review_date,
+                deadline=note_data.deadline,
+                outcome=note_data.outcome,
+                resolved_at=note_data.resolved_at,
+                created_at=note_data.created_at or datetime.now(JST),
+                updated_at=note_data.updated_at or datetime.now(JST),
+                user_id=current_user.id,
+                user=current_user,
+            )
+            session.add(note)
+            imported['notes'] += 1
+
+        for draft_data in payload.daily_draft_todos:
+            draft_key = _key(draft_data.id)
+            if already_seen('daily_draft_todos', draft_key):
+                continue
+            draft = DailyDraftTodo(
+                title=draft_data.title,
+                day=draft_data.day,
+                done=draft_data.done,
+                created_at=draft_data.created_at or datetime.now(JST),
+                updated_at=draft_data.updated_at or datetime.now(JST),
+                completed_at=draft_data.completed_at,
+                user_id=current_user.id,
+                user=current_user,
+            )
+            session.add(draft)
+            imported['daily_draft_todos'] += 1
 
         session.commit()
     except Exception:

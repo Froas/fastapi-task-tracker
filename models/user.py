@@ -1,8 +1,9 @@
 from sqlmodel import SQLModel, Field, Relationship
 from passlib.context import CryptContext
 from pydantic import EmailStr, BaseModel
-from typing import Optional, TYPE_CHECKING, List
+from typing import Any, Optional, TYPE_CHECKING, List
 import uuid
+from sqlalchemy import Column, JSON
 
 if TYPE_CHECKING:
     from .goal import Goal
@@ -31,6 +32,11 @@ class UserBase(SQLModel):
     # Mirrored from the frontend DesignThemeProvider so theme follows the
     # user across devices. Nullable = use device default.
     preferred_theme: Optional[str] = Field(default=None)
+    nav_preferences: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    dashboard_preferences: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    pinned_goal_ids: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
+    recent_goal_ids: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
+    goal_color_overrides: Optional[dict[str, str]] = Field(default=None, sa_column=Column(JSON))
 
     def set_password(self, password: str):
         self.password_hash = pwd_context.hash(password)
@@ -46,6 +52,11 @@ class UserRead(SQLModel):
     username: str
     email: EmailStr
     preferred_theme: Optional[str] = None
+    nav_preferences: Optional[dict[str, Any]] = None
+    dashboard_preferences: Optional[dict[str, Any]] = None
+    pinned_goal_ids: Optional[list[str]] = None
+    recent_goal_ids: Optional[list[str]] = None
+    goal_color_overrides: Optional[dict[str, str]] = None
     
 class User(UserBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4) 
@@ -71,6 +82,11 @@ class UserUpdate(SQLModel):
     username: Optional[str] = None
     email: Optional[EmailStr] = None
     preferred_theme: Optional[str] = None
+    nav_preferences: Optional[dict[str, Any]] = None
+    dashboard_preferences: Optional[dict[str, Any]] = None
+    pinned_goal_ids: Optional[list[str]] = None
+    recent_goal_ids: Optional[list[str]] = None
+    goal_color_overrides: Optional[dict[str, str]] = None
 
 
 class UserInDB(UserBase):

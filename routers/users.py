@@ -12,7 +12,13 @@ import os
  
 load_dotenv()
 
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60'))
+try:
+    ACCESS_TOKEN_EXPIRE_MINUTES = max(
+        1,
+        int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '1440')),
+    )
+except ValueError:
+    ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 
 def authenticate_user(session: Session, username: str, password: str):

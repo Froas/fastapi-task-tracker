@@ -98,7 +98,6 @@ async def create_task(
                 Milestone.id == milestone_id,
                 Milestone.user_id == current_user.id,
                 Milestone.deleted_at.is_(None),
-                Milestone.id.in_(active_milestone_ids(current_user.id)),
             )
         ).first()
         if milestone is None:
@@ -189,11 +188,19 @@ async def update_task(
                 Milestone.id == next_milestone_id,
                 Milestone.user_id == currente_user.id,
                 Milestone.deleted_at.is_(None),
-                Milestone.id.in_(active_milestone_ids(currente_user.id)),
             )
         ).first()
         if milestone is None:
             raise HTTPException(status_code=404, detail='Milestone not found')
+        goal = session.exec(
+            select(Goal).where(
+                Goal.id == milestone.goal_id,
+                Goal.user_id == currente_user.id,
+                Goal.deleted_at.is_(None),
+            )
+        ).first()
+        if goal is None:
+            raise HTTPException(status_code=404, detail='Goal not found')
         next_goal_id = milestone.goal_id
     
     update_data = task_data.model_dump(exclude_unset=True, exclude={'id'})
@@ -225,7 +232,11 @@ async def update_task(
     for key, value in update_data.items():
         setattr(task, key, value)
     session.add(task)
-    recalculate_task_hierarchy(session, task.id)
+    recalculate_task_hierarchy(
+        session,
+        task.id,
+        recalculate_task='status' not in update_data,
+    )
     session.commit()
     session.refresh(task)
     return task
@@ -292,11 +303,6 @@ async def get_task(
         current_user.id == Task.user_id,
         Task.id == task_id,
         Task.deleted_at.is_(None),
-        (
-            Task.milestone_id.in_(active_milestone_ids(current_user.id))
-        ) | (
-            Task.goal_id.in_(active_goal_ids(current_user.id))
-        ),
     )
     if query is None:
         raise HTTPException(status_code=404, detail="Task not found")

@@ -134,6 +134,18 @@ def audit_structural_and_unlocking() -> None:
     assert reopened["milestones"][1]["status"] == "in progress"
     assert reopened["status"] == "in progress"
 
+    require(client.patch("/user/task/subtasks/update", json={"id": final_subtask["id"], "status": "finished"}))
+    require(client.get(f"/user/milestones/{milestone_two['id']}?include_tasks=true&include_subtasks=true"))
+    manually_reopened_task = require(client.patch("/user/tasks/update", json={
+        "id": task_two["id"],
+        "status": "outstanding",
+    }))
+    assert manually_reopened_task["status"] == "outstanding"
+    manually_reopened = get_goal(goal["id"])
+    assert manually_reopened["milestones"][1]["tasks"][0]["status"] == "outstanding"
+    assert manually_reopened["milestones"][1]["status"] == "in progress"
+    assert manually_reopened["status"] == "in progress"
+
 
 def audit_outcome_rule() -> None:
     goal = create_goal("Outcome goal", {

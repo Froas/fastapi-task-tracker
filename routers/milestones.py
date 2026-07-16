@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from models import Goal, Milestone, MilestoneBase, MilestoneRead, MilestoneReadNested, MilestoneUpdate, MilestoneReorderRequest, Task, Todo, get_current_active_user
+from models import Goal, Milestone, MilestoneBase, MilestoneRead, MilestoneReadNested, MilestoneUpdate, MilestoneReorderRequest, Task, Todo, StatusType, get_current_active_user
 from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload, noload
 from routers.users import User
@@ -91,6 +91,24 @@ async def update_milestone(
         ).first()
         if goal is None:
             raise HTTPException(status_code=404, detail='Goal not found')
+
+    target_goal = session.get(Goal, milestone.goal_id)
+    if (
+        milestone_data.status == StatusType.FINISHED
+        and target_goal is not None
+        and target_goal.enforce_sequential_milestones
+    ):
+        unfinished_predecessor = session.exec(
+            select(Milestone).where(
+                Milestone.goal_id == milestone.goal_id,
+                Milestone.user_id == current_user.id,
+                Milestone.deleted_at.is_(None),
+                Milestone.position < milestone.position,
+                Milestone.status.notin_([StatusType.FINISHED, StatusType.CLOSED]),
+            )
+        ).first()
+        if unfinished_predecessor is not None:
+            raise HTTPException(status_code=409, detail='Finish previous milestones first')
     
     update_data = milestone_data.model_dump(exclude_unset=True, exclude={'id'})
     if 'status' in update_data and milestone.completion_rule:
@@ -156,7 +174,6 @@ async def get_milestone(
         Milestone.user_id == current_user.id,
         Milestone.id == milestone_id,
         Milestone.deleted_at.is_(None),
-        Milestone.goal_id.in_(active_goal_ids(current_user.id)),
     )
     if query is None:
         raise HTTPException(status_code=404, detail="Query not found")

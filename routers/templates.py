@@ -8,6 +8,8 @@ from sqlmodel import Session, or_, select
 from db import get_session
 from models import (
     Goal,
+    JourneyCharacterId,
+    JourneyThemeId,
     MetricDefinition,
     Milestone,
     PriorityType,
@@ -313,6 +315,8 @@ def _materialize_blueprint(
         start_datetime=start_dt,
         end_datetime=end_dt,
         completion_rule=blueprint.get("completion_rule"),
+        journey_theme_id=blueprint.get("journey_theme_id", JourneyThemeId.MOUNTAIN),
+        journey_character_id=blueprint.get("journey_character_id", JourneyCharacterId.BAT),
         status=_status(blueprint.get("status")),
         priority=_priority(blueprint.get("priority"), PriorityType.HIGH),
         position=_max_position(session, Goal, user) + 1,

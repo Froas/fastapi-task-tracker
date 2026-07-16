@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, TYPE_CHECKING
-from datetime import datetime
+from datetime import date, datetime
 from utils.timezone import JST
 import uuid
 
@@ -17,6 +17,14 @@ class NoteBase(SQLModel):
     source: Optional[str] = None
     goal_id: Optional[uuid.UUID] = Field(default=None, foreign_key='goal.id')
     task_id: Optional[uuid.UUID] = Field(default=None, foreign_key='task.id')
+    signal_domain: Optional[str] = None
+    signal_stake: Optional[str] = None
+    signal_decision: Optional[str] = None
+    next_action: Optional[str] = None
+    review_date: Optional[date] = None
+    deadline: Optional[date] = None
+    outcome: Optional[str] = None
+    resolved_at: Optional[datetime] = None
 
 
 class NoteCreate(SQLModel):
@@ -28,6 +36,14 @@ class NoteCreate(SQLModel):
     source: Optional[str] = None
     goal_id: Optional[uuid.UUID] = None
     task_id: Optional[uuid.UUID] = None
+    signal_domain: Optional[str] = None
+    signal_stake: Optional[str] = None
+    signal_decision: Optional[str] = None
+    next_action: Optional[str] = None
+    review_date: Optional[date] = None
+    deadline: Optional[date] = None
+    outcome: Optional[str] = None
+    resolved_at: Optional[datetime] = None
 
 
 class NoteUpdate(SQLModel):
@@ -40,6 +56,14 @@ class NoteUpdate(SQLModel):
     source: Optional[str] = None
     goal_id: Optional[uuid.UUID] = None
     task_id: Optional[uuid.UUID] = None
+    signal_domain: Optional[str] = None
+    signal_stake: Optional[str] = None
+    signal_decision: Optional[str] = None
+    next_action: Optional[str] = None
+    review_date: Optional[date] = None
+    deadline: Optional[date] = None
+    outcome: Optional[str] = None
+    resolved_at: Optional[datetime] = None
 
 
 class Note(NoteBase, table=True):

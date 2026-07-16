@@ -120,6 +120,19 @@ def audit_hierarchy() -> None:
     require(client.put("/user/milestones/reorder", json={"milestone_ids": milestone_ids}))
     nested = require(client.get(f"/user/goals/{goal_id}?include_milestones=true"))
     assert [milestone["id"] for milestone in nested["milestones"]] == milestone_ids
+    sequential_goal = require(client.patch("/user/goals/update", json={
+        "id": goal_id,
+        "enforce_sequential_milestones": True,
+    }))
+    assert sequential_goal["enforce_sequential_milestones"] is True
+    blocked = client.patch("/user/milestones/update", json={
+        "id": milestones[0]["id"],
+        "status": "finished",
+    })
+    assert blocked.status_code == 409
+    require(client.patch("/user/milestones/update", json={"id": milestones[2]["id"], "status": "finished"}))
+    require(client.patch("/user/milestones/update", json={"id": milestones[1]["id"], "status": "finished"}))
+    require(client.patch("/user/milestones/update", json={"id": milestones[0]["id"], "status": "finished"}))
     require(client.patch("/user/milestones/update", json={
         "id": milestones[0]["id"],
         "title": "Milestone updated",
@@ -200,6 +213,28 @@ def audit_hierarchy() -> None:
 
 
 def audit_auxiliary_entities() -> None:
+    preferences = require(client.patch("/users/me", json={
+        "nav_preferences": {"orderedIds": ["today", "goals"], "primaryIds": ["today"], "hiddenIds": []},
+        "dashboard_preferences": {"orderedIds": ["today", "calendar"], "hiddenIds": ["activity"]},
+        "pinned_goal_ids": [state["goal_id"]],
+        "recent_goal_ids": [state["goal_id"]],
+        "goal_color_overrides": {state["goal_id"]: "from-blue-500 to-purple-600"},
+    }))
+    assert preferences["nav_preferences"]["primaryIds"] == ["today"]
+    assert preferences["dashboard_preferences"]["hiddenIds"] == ["activity"]
+    assert preferences["pinned_goal_ids"] == [state["goal_id"]]
+    assert preferences["recent_goal_ids"] == [state["goal_id"]]
+    assert preferences["goal_color_overrides"][state["goal_id"]] == "from-blue-500 to-purple-600"
+
+    active_user["id"] = second_user_id
+    foreign_goal = require(client.post("/user/goals", json={"title": "Foreign goal"}))
+    active_user["id"] = first_user_id
+    foreign_relation = client.post("/user/notes", json={
+        "title": "Invalid cross-account relation",
+        "goal_id": foreign_goal["id"],
+    })
+    assert foreign_relation.status_code == 404
+
     event = require(client.post("/user/events", json={
         "title": "Audit event",
         "start_datetime": f"{today}T09:00:00",
@@ -221,6 +256,32 @@ def audit_auxiliary_entities() -> None:
     }))
     note_reload = require(client.get(f"/user/notes/{note['id']}"))
     assert note_reload["title"] == "Note updated" and note_reload["pinned"] is True
+
+    signal = require(client.post("/user/notes", json={
+        "title": "Audit signal",
+        "kind": "signal",
+        "signal_domain": "work",
+        "signal_stake": "medium",
+    }))
+    assert signal["signal_domain"] == "work" and signal["signal_decision"] is None
+    invalid_watch = client.patch("/user/notes/update", json={
+        "id": signal["id"],
+        "signal_decision": "watch",
+    })
+    assert invalid_watch.status_code == 422
+    watched = require(client.patch("/user/notes/update", json={
+        "id": signal["id"],
+        "signal_decision": "watch",
+        "review_date": today,
+        "next_action": "Review the evidence",
+    }))
+    assert watched["review_date"] == today and watched["resolved_at"] is None
+    resolved = require(client.patch("/user/notes/update", json={
+        "id": signal["id"],
+        "outcome": "Handled",
+        "resolved_at": datetime.now(JST).isoformat(),
+    }))
+    assert resolved["resolved_at"] is not None and resolved["outcome"] == "Handled"
 
     draft = require(client.post("/user/daily-draft-todos", json={"title": "Audit draft", "day": today}))
     require(client.patch("/user/daily-draft-todos/update", json={"id": draft["id"], "done": True}))
@@ -264,7 +325,13 @@ def audit_auxiliary_entities() -> None:
     today_metrics = require(client.get(f"/user/metrics/today?selected_date={today}"))
     assert any(item["id"] == metric["id"] and item["numeric_value"] == 43 for item in today_metrics)
 
-    state.update({"event_id": event["id"], "note_id": note["id"], "draft_id": draft["id"], "metric_id": metric["id"]})
+    state.update({
+        "event_id": event["id"],
+        "note_id": note["id"],
+        "signal_id": signal["id"],
+        "draft_id": draft["id"],
+        "metric_id": metric["id"],
+    })
 
 
 def audit_template() -> None:
@@ -329,6 +396,11 @@ def audit_backup_round_trip() -> None:
     exported = require(client.get("/user/backup/export"))
     exported_goal = next(goal for goal in exported["goals"] if goal["id"] == state["goal_id"])
     assert exported_goal.get("completion_rule") is not None, "completion_rule missing from exported goal"
+    exported_note = next(note for note in exported["notes"] if note["id"] == state["note_id"])
+    exported_signal = next(note for note in exported["notes"] if note["id"] == state["signal_id"])
+    assert exported_note["goal_id"] == state["goal_id"]
+    assert exported_signal["kind"] == "signal" and exported_signal["signal_decision"] == "watch"
+    assert any(draft["id"] == state["draft_id"] and draft["done"] for draft in exported["daily_draft_todos"])
 
     active_user["id"] = second_user_id
     imported = require(client.post("/user/backup/import", json=exported))
@@ -338,6 +410,13 @@ def audit_backup_round_trip() -> None:
     assert imported_goal.get("completion_rule") == exported_goal.get("completion_rule")
     imported_detail = require(client.get(f"/user/goals/{imported_goal['id']}?include_milestones=true&include_tasks=true&include_subtasks=true&include_todos=true"))
     assert imported_detail["milestones"] and imported_detail["tasks"]
+    imported_notes = require(client.get("/user/notes"))
+    imported_note = next(note for note in imported_notes if note["title"] == "Note updated")
+    imported_signal = next(note for note in imported_notes if note["title"] == "Audit signal")
+    assert imported_note["goal_id"] == imported_goal["id"]
+    assert imported_signal["kind"] == "signal" and imported_signal["signal_decision"] == "watch"
+    imported_drafts = require(client.get(f"/user/daily-draft-todos?selected_date={today}&include_done=true"))
+    assert any(draft["title"] == "Audit draft" and draft["done"] for draft in imported_drafts)
     active_user["id"] = first_user_id
 
 

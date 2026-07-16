@@ -290,13 +290,19 @@ def _apply_result(session: Session, entity: Goal | Milestone | Task) -> RuleResu
     return result
 
 
-def recalculate_task_hierarchy(session: Session, task_id: uuid.UUID | None) -> None:
+def recalculate_task_hierarchy(
+    session: Session,
+    task_id: uuid.UUID | None,
+    *,
+    recalculate_task: bool = True,
+) -> None:
     if task_id is None:
         return
     task = session.get(Task, task_id)
     if task is None or task.deleted_at is not None:
         return
-    _apply_result(session, task)
+    if recalculate_task:
+        _apply_result(session, task)
     milestone = session.get(Milestone, task.milestone_id) if task.milestone_id else None
     if milestone is not None and milestone.deleted_at is None:
         _apply_result(session, milestone)

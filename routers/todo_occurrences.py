@@ -65,6 +65,7 @@ def _read_occurrence(session: Session, occurrence: TodoOccurrence) -> TodoOccurr
         value=occurrence.value,
         note=occurrence.note,
         completed_at=occurrence.completed_at,
+        is_focus=occurrence.is_focus,
         todo_id=occurrence.todo_id,
         daily_log_id=occurrence.daily_log_id,
         created_at=occurrence.created_at,
@@ -188,6 +189,8 @@ async def update_todo_occurrence(
         occurrence.value = occurrence_data.value
     if occurrence_data.note is not None:
         occurrence.note = occurrence_data.note
+    if occurrence_data.is_focus is not None:
+        occurrence.is_focus = occurrence_data.is_focus
 
     occurrence.updated_at = datetime.now(JST)
     session.add(occurrence)

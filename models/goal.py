@@ -1,8 +1,9 @@
 # from __future__ import annotations
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from sqlalchemy import Enum as SAEnum
 from typing import Optional, List, TYPE_CHECKING, Any
-from .enums import StatusType, PriorityType
+from .enums import StatusType, PriorityType, JourneyCharacterId, JourneyThemeId
 from datetime import datetime
 from utils.timezone import JST
 import uuid
@@ -21,6 +22,29 @@ class GoalBase(SQLModel):
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     end_datetime: Optional[datetime] = None
     completion_rule: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    enforce_sequential_milestones: bool = Field(default=False)
+    journey_theme_id: JourneyThemeId = Field(
+        default=JourneyThemeId.MOUNTAIN,
+        sa_column=Column(
+            SAEnum(
+                JourneyThemeId,
+                values_callable=lambda enum_type: [item.value for item in enum_type],
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+    )
+    journey_character_id: JourneyCharacterId = Field(
+        default=JourneyCharacterId.BAT,
+        sa_column=Column(
+            SAEnum(
+                JourneyCharacterId,
+                values_callable=lambda enum_type: [item.value for item in enum_type],
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+    )
     
     # class Config:
     #     arbitrary_types_allowed = True 
@@ -38,6 +62,9 @@ class GoalCreate(SQLModel):
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     priority: Optional[PriorityType] = Field(default=PriorityType.HIGH)
     completion_rule: Optional[dict[str, Any]] = None
+    enforce_sequential_milestones: bool = False
+    journey_theme_id: JourneyThemeId = Field(default=JourneyThemeId.MOUNTAIN)
+    journey_character_id: JourneyCharacterId = Field(default=JourneyCharacterId.BAT)
 
 class Goal(GoalBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
@@ -72,6 +99,9 @@ class GoalUpdate(SQLModel):
     end_datetime: Optional[datetime] = None
     position: Optional[int] = None
     completion_rule: Optional[dict[str, Any]] = None
+    enforce_sequential_milestones: Optional[bool] = None
+    journey_theme_id: Optional[JourneyThemeId] = None
+    journey_character_id: Optional[JourneyCharacterId] = None
 
 class GoalReorderRequest(SQLModel):
     goal_ids: List[uuid.UUID]

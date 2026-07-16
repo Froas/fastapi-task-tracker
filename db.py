@@ -1,6 +1,10 @@
+import os
+from pathlib import Path
+
 from sqlmodel import create_engine, SQLModel, Session
 
-DATABASE_URL = 'sqlite:///db.sqlite'
+DEFAULT_DATABASE_PATH = Path(__file__).resolve().parent / "db.sqlite"
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DEFAULT_DATABASE_PATH}")
 
 engine = create_engine(DATABASE_URL, echo=True)
 

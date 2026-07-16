@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -16,8 +17,11 @@ from models import (
 config = context.config
 
 
-DB_PATH = str((Path().parent / 'db.sqlite').resolve())
-config.set_main_option('sqlalchemy.url', f"sqlite:///{DB_PATH}")
+DB_PATH = Path(__file__).resolve().parent.parent / "db.sqlite"
+config.set_main_option(
+    "sqlalchemy.url",
+    os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}"),
+)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

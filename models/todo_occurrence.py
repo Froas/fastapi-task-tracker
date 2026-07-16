@@ -16,6 +16,7 @@ class TodoOccurrenceBase(SQLModel):
     value: Optional[str] = None
     note: Optional[str] = None
     completed_at: Optional[datetime] = None
+    is_focus: bool = Field(default=False)
     todo_id: uuid.UUID = Field(foreign_key='todo.id', index=True)
     daily_log_id: Optional[uuid.UUID] = Field(foreign_key='dailylog.id', default=None)
 
@@ -35,6 +36,7 @@ class TodoOccurrenceUpdate(SQLModel):
     status: Optional[str] = None
     value: Optional[str] = None
     note: Optional[str] = None
+    is_focus: Optional[bool] = None
 
 
 class TodoOccurrenceRead(TodoOccurrenceBase):
