@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from sqlalchemy import Text
 from typing import Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 from utils.timezone import JST
@@ -15,6 +16,7 @@ from .task import TaskReadNested
 class MilestoneBase(SQLModel):
     title: str
     description: str = ''
+    success_criteria: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     due_date: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
@@ -51,6 +53,7 @@ class MilestoneUpdate(SQLModel):
     id: uuid.UUID
     title: Optional[str] = None
     description: Optional[str] = None
+    success_criteria: Optional[str] = None
     status: Optional[StatusType] = None
     priority: Optional[PriorityType] = None
     due_date: Optional[datetime] = None

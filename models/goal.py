@@ -1,7 +1,7 @@
 # from __future__ import annotations
 
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
-from sqlalchemy import Enum as SAEnum
+from sqlalchemy import Enum as SAEnum, Text
 from typing import Optional, List, TYPE_CHECKING, Any
 from .enums import StatusType, PriorityType, JourneyCharacterId, JourneyThemeId
 from datetime import datetime
@@ -19,6 +19,7 @@ from .task import TaskReadNested
 class GoalBase(SQLModel):
     title: str
     description: Optional[str] = None
+    success_criteria: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     end_datetime: Optional[datetime] = None
     completion_rule: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
@@ -57,6 +58,7 @@ class GoalRead(GoalBase):
 class GoalCreate(SQLModel):
     title: str
     description: Optional[str] = None
+    success_criteria: Optional[str] = None
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     end_datetime: Optional[datetime] = None
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
@@ -93,6 +95,7 @@ class GoalUpdate(SQLModel):
     id: uuid.UUID
     title: Optional[str] = None
     description: Optional[str] = None
+    success_criteria: Optional[str] = None
     status: Optional[StatusType] = None
     priority: Optional[PriorityType] = None
     start_datetime: Optional[datetime] = None

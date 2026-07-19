@@ -92,14 +92,32 @@ alembic upgrade head
 Create a `.env` file in your project root with the following keys:
 
 ```env
-```bash
-ACCESS_TOKEN_EXPIRE_MINUTES=
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+REFRESH_TOKEN_EXPIRE_DAYS=30
 SECRET_KEY=
 ALGORITHM=
 GOOGLE_CLIENT_SECRET=
 GOOGLE_CLIENT_ID=
 REDIRECT=
+AI_GOAL_PROVIDER=gemini
+GEMINI_API_KEY=
+GEMINI_GOAL_MODEL=gemini-3.1-flash-lite
+AI_GOAL_MONTHLY_REQUEST_LIMIT=20
+
+# Optional paid/alternative provider
+OPENAI_API_KEY=
+OPENAI_GOAL_MODEL=gpt-5.6-terra
 ```
+
+`GEMINI_API_KEY` and `OPENAI_API_KEY` are read only by the backend. Gemini is
+the default test/free-tier provider; set `AI_GOAL_PROVIDER=openai` to use the
+OpenAI fallback. When the selected key is empty, the normal goal and template
+flows continue to work and the AI planner reports that it is not configured.
+`AI_GOAL_MONTHLY_REQUEST_LIMIT` counts AI
+requests per user and calendar month; use `0` to disable the allowance or `-1`
+for no monthly limit. The usage ledger stores status, provider/model and token
+counts, never the user's prompt or generated draft. Gemini Free Tier requests
+are subject to Google's data-use terms and may be used to improve its products.
 
 ---
 

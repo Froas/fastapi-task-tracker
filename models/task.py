@@ -1,4 +1,5 @@
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
+from sqlalchemy import Text
 from typing import Optional, List, TYPE_CHECKING, Any
 from datetime import datetime
 from .enums import StatusType, PriorityType
@@ -19,6 +20,7 @@ from .subtask import SubtaskRead
 class TaskBase(SQLModel):
     title: str
     description: str = ''
+    success_criteria: Optional[str] = Field(default=None, sa_column=Column(Text, nullable=True))
     due_date: Optional[datetime] = None
     scheduled_date: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
@@ -48,6 +50,7 @@ class TaskUpdate(SQLModel):
     id: uuid.UUID
     title: Optional[str] = None
     description: Optional[str] = None
+    success_criteria: Optional[str] = None
     priority: Optional[PriorityType] = None
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None

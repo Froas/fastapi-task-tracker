@@ -130,6 +130,7 @@ async def create_task(
     task = Task(
         title=task_data.title, 
         description=task_data.description, 
+        success_criteria=task_data.success_criteria,
         due_date=task_data.due_date, 
         scheduled_date=task_data.scheduled_date,
         status=task_data.status,

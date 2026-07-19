@@ -15,3 +15,4 @@ from .daily_draft_todos import daily_draft_todos_router
 from .daily_logs import daily_logs_router
 from .todo_occurrences import todo_occurrences_router
 from .metrics import metrics_router
+from .ai_goal_plans import ai_goal_plans_router

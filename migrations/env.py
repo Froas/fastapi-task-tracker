@@ -10,7 +10,7 @@ from alembic import context
 from models import (
     User, Goal, Milestone, Task, Subtask, Todo, Event, Tag,
     Note, Template, DailyDraftTodo, DailyLog, TodoOccurrence,
-    MetricDefinition, MetricEntry, GoogleCalendar,
+    MetricDefinition, MetricEntry, AIGoalUsage, GoogleCalendar,
 )
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

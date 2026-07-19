@@ -80,6 +80,18 @@ def _active_task(session: Session, user: User, task_id) -> Task | None:
     ).first()
 
 
+def _active_milestone(session: Session, user: User, milestone_id) -> Milestone | None:
+    if milestone_id is None:
+        return None
+    return session.exec(
+        select(Milestone).where(
+            Milestone.id == milestone_id,
+            Milestone.user_id == user.id,
+            Milestone.deleted_at.is_(None),
+        )
+    ).first()
+
+
 def _goal_for_metric(session: Session, metric: MetricDefinition) -> Goal | None:
     if metric.goal_id:
         return session.exec(
@@ -89,6 +101,10 @@ def _goal_for_metric(session: Session, metric: MetricDefinition) -> Goal | None:
             )
         ).first()
 
+    if metric.milestone_id:
+        milestone = session.get(Milestone, metric.milestone_id)
+        if milestone and milestone.goal_id:
+            return session.get(Goal, milestone.goal_id)
     if metric.task_id:
         task = session.get(Task, metric.task_id)
         if task and task.goal_id:
@@ -112,6 +128,7 @@ def _metric_read(metric: MetricDefinition) -> MetricDefinitionRead:
         input_type=metric.input_type,
         show_on_today=metric.show_on_today,
         goal_id=metric.goal_id,
+        milestone_id=metric.milestone_id,
         task_id=metric.task_id,
         position=metric.position,
         created_at=metric.created_at,
@@ -148,7 +165,7 @@ async def list_metric_definitions(
         select(MetricDefinition)
         .where(MetricDefinition.user_id == current_user.id)
         .where(MetricDefinition.deleted_at.is_(None))
-        .order_by(MetricDefinition.goal_id, MetricDefinition.task_id, MetricDefinition.position, MetricDefinition.id)
+        .order_by(MetricDefinition.goal_id, MetricDefinition.milestone_id, MetricDefinition.task_id, MetricDefinition.position, MetricDefinition.id)
     ).all()
     return [_metric_read(metric) for metric in metrics]
 
@@ -161,6 +178,7 @@ async def create_metric_definition(
 ) -> MetricDefinitionRead:
     input_type = _normalize_input_type(metric_data.input_type)
     goal_id = metric_data.goal_id
+    milestone_id = metric_data.milestone_id
     task_id = metric_data.task_id
 
     task = _active_task(session, current_user, task_id) if task_id else None
@@ -168,6 +186,12 @@ async def create_metric_definition(
         raise HTTPException(status_code=404, detail="Task not found")
     if task and goal_id is None:
         goal_id = task.goal_id
+
+    milestone = _active_milestone(session, current_user, milestone_id) if milestone_id else None
+    if milestone_id and milestone is None:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    if milestone and goal_id is None:
+        goal_id = milestone.goal_id
 
     if goal_id is not None and _active_goal(session, current_user, goal_id) is None:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -177,6 +201,7 @@ async def create_metric_definition(
         .where(
             MetricDefinition.user_id == current_user.id,
             MetricDefinition.goal_id == goal_id,
+            MetricDefinition.milestone_id == milestone_id,
             MetricDefinition.task_id == task_id,
             MetricDefinition.deleted_at.is_(None),
         )
@@ -189,6 +214,7 @@ async def create_metric_definition(
         input_type=input_type,
         show_on_today=metric_data.show_on_today,
         goal_id=goal_id,
+        milestone_id=milestone_id,
         task_id=task_id,
         position=metric_data.position if metric_data.position is not None else (max_position or 0) + 1,
         user_id=current_user.id,
@@ -214,12 +240,19 @@ async def update_metric_definition(
         update_data["input_type"] = _normalize_input_type(update_data["input_type"])
 
     next_goal_id = update_data.get("goal_id", metric.goal_id)
+    next_milestone_id = update_data.get("milestone_id", metric.milestone_id)
     next_task_id = update_data.get("task_id", metric.task_id)
     task = _active_task(session, current_user, next_task_id) if next_task_id else None
     if next_task_id and task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     if task and next_goal_id is None:
         next_goal_id = task.goal_id
+        update_data["goal_id"] = next_goal_id
+    milestone = _active_milestone(session, current_user, next_milestone_id) if next_milestone_id else None
+    if next_milestone_id and milestone is None:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    if milestone and next_goal_id is None:
+        next_goal_id = milestone.goal_id
         update_data["goal_id"] = next_goal_id
     if next_goal_id is not None and _active_goal(session, current_user, next_goal_id) is None:
         raise HTTPException(status_code=404, detail="Goal not found")
@@ -272,7 +305,7 @@ async def get_today_metrics(
                 & (MetricDefinition.task_id.in_(active_task_ids(current_user.id)))
             ),
         )
-        .order_by(MetricDefinition.goal_id, MetricDefinition.task_id, MetricDefinition.position, MetricDefinition.id)
+        .order_by(MetricDefinition.goal_id, MetricDefinition.milestone_id, MetricDefinition.task_id, MetricDefinition.position, MetricDefinition.id)
     ).all()
     metric_ids = [metric.id for metric in metrics if metric.id is not None]
     entries = session.exec(

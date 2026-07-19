@@ -54,6 +54,9 @@ class TemplateUpdate(SQLModel):
 class Template(TemplateBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
     created_at: datetime = Field(default_factory=lambda: datetime.now(JST))
+    visibility: str = Field(default="private", index=True)
+    share_code: Optional[str] = Field(default=None, index=True, unique=True)
+    shared_at: Optional[datetime] = None
     # NULL user_id = system / built-in template visible to everyone.
     user_id: Optional[uuid.UUID] = Field(default=None, foreign_key='user.id')
     user: Optional['User'] = Relationship(back_populates='templates')
@@ -63,6 +66,15 @@ class TemplateRead(TemplateBase):
     id: uuid.UUID
     created_at: datetime
     user_id: Optional[uuid.UUID]
+    visibility: str = "private"
+    share_code: Optional[str] = None
+    shared_at: Optional[datetime] = None
+
+
+class SharedTemplateRead(TemplateBase):
+    """Sanitized preview returned to a user who knows an unlisted code."""
+    share_code: str
+    shared_at: Optional[datetime] = None
 
 
 class TemplateInstantiate(SQLModel):
@@ -78,3 +90,12 @@ class TemplateInstantiateBlueprint(TemplateCreate):
     title_override: Optional[str] = None
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
+
+
+class TemplateCreateFromGoal(SQLModel):
+    """Create a private, reusable template from one of the user's goals."""
+    goal_id: uuid.UUID
+    title: Optional[str] = None
+    description: Optional[str] = None
+    emoji: Optional[str] = None
+    tags: Optional[List[str]] = None

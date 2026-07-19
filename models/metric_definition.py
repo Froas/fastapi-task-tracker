@@ -7,6 +7,7 @@ import uuid
 if TYPE_CHECKING:
     from .user import User
     from .goal import Goal
+    from .milestone import Milestone
     from .task import Task
     from .metric_entry import MetricEntry
 
@@ -17,6 +18,7 @@ class MetricDefinitionBase(SQLModel):
     input_type: str = Field(default='number')
     show_on_today: bool = Field(default=True)
     goal_id: Optional[uuid.UUID] = Field(foreign_key='goal.id', default=None, index=True)
+    milestone_id: Optional[uuid.UUID] = Field(foreign_key='milestone.id', default=None, index=True)
     task_id: Optional[uuid.UUID] = Field(foreign_key='task.id', default=None, index=True)
     position: int = Field(default=0, index=True)
 
@@ -29,6 +31,7 @@ class MetricDefinition(MetricDefinitionBase, table=True):
     user_id: uuid.UUID = Field(foreign_key='user.id', index=True)
     user: 'User' = Relationship(back_populates='metric_definitions')
     goal: Optional['Goal'] = Relationship()
+    milestone: Optional['Milestone'] = Relationship()
     task: Optional['Task'] = Relationship()
     entries: list['MetricEntry'] = Relationship(back_populates='metric_definition')
 
@@ -39,6 +42,7 @@ class MetricDefinitionCreate(SQLModel):
     input_type: str = 'number'
     show_on_today: bool = True
     goal_id: Optional[uuid.UUID] = None
+    milestone_id: Optional[uuid.UUID] = None
     task_id: Optional[uuid.UUID] = None
     position: Optional[int] = None
 
@@ -50,6 +54,7 @@ class MetricDefinitionUpdate(SQLModel):
     input_type: Optional[str] = None
     show_on_today: Optional[bool] = None
     goal_id: Optional[uuid.UUID] = None
+    milestone_id: Optional[uuid.UUID] = None
     task_id: Optional[uuid.UUID] = None
     position: Optional[int] = None
 

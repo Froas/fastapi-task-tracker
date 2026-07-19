@@ -18,6 +18,7 @@ from routers import (
     daily_logs_router,
     todo_occurrences_router,
     metrics_router,
+    ai_goal_plans_router,
 )
 
 
@@ -63,6 +64,7 @@ app.include_router(daily_draft_todos_router, tags=['daily draft todos'])
 app.include_router(daily_logs_router, tags=['daily logs'])
 app.include_router(todo_occurrences_router, tags=['todo occurrences'])
 app.include_router(metrics_router, tags=['metrics'])
+app.include_router(ai_goal_plans_router, tags=['ai goal planning'])
 
 
 @app.get('/')

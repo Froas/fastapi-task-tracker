@@ -91,6 +91,7 @@ def audit_hierarchy() -> None:
         goal = require(client.post("/user/goals", json={
             "title": f"Audit goal {index + 1}",
             "description": "created",
+            "success_criteria": f"Goal outcome {index + 1}",
             "completion_rule": {"type": "structural"},
         }))
         goals.append(goal)
@@ -102,10 +103,12 @@ def audit_hierarchy() -> None:
         "id": goals[0]["id"],
         "title": "Audit goal updated",
         "description": "persisted",
+        "success_criteria": "Goal outcome persisted",
         "status": "started",
         "completion_rule": {"type": "consistency", "label": "Audit", "current_done": 2, "required_done": 3, "window_days": 7},
     }))
     assert updated_goal["title"] == "Audit goal updated"
+    assert updated_goal["success_criteria"] == "Goal outcome persisted"
     assert updated_goal["completion_rule"]["type"] == "consistency"
 
     goal_id = goals[0]["id"]
@@ -114,6 +117,7 @@ def audit_hierarchy() -> None:
         milestones.append(require(client.post("/user/milestones", json={
             "title": f"Milestone {index + 1}",
             "description": "created",
+            "success_criteria": f"Milestone outcome {index + 1}",
             "goal_id": goal_id,
         })))
     milestone_ids = [milestone["id"] for milestone in reversed(milestones)]
@@ -139,11 +143,13 @@ def audit_hierarchy() -> None:
         "status": "started",
     }))
     assert require(client.get(f"/user/milestones/{milestones[0]['id']}"))["title"] == "Milestone updated"
+    assert require(client.get(f"/user/milestones/{milestones[0]['id']}"))["success_criteria"] == "Milestone outcome 1"
 
     tasks = []
     for index in range(3):
         tasks.append(require(client.post("/user/tasks", json={
             "title": f"Task {index + 1}",
+            "success_criteria": f"Task outcome {index + 1}",
             "goal_id": goal_id,
             "milestone_id": milestones[0]["id"],
             "scope": "milestone",
@@ -156,8 +162,10 @@ def audit_hierarchy() -> None:
     require(client.patch("/user/tasks/update", json={
         "id": tasks[0]["id"],
         "title": "Task updated",
+        "success_criteria": "Task outcome persisted",
         "status": "in progress",
     }))
+    assert require(client.get(f"/user/tasks/{tasks[0]['id']}"))["success_criteria"] == "Task outcome persisted"
 
     routine = require(client.post("/user/tasks", json={
         "title": "Goal routine",

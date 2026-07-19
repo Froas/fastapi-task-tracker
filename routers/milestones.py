@@ -54,6 +54,7 @@ async def create_milestone(
     milestone = Milestone(
         title=milestone_data.title, 
         description=milestone_data.description, 
+        success_criteria=milestone_data.success_criteria,
         due_date=milestone_data.due_date, 
         start_datetime=milestone_data.start_datetime,
         user_id=current_user.id, 

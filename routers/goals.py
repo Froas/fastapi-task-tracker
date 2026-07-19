@@ -39,6 +39,7 @@ async def get_goal(
     goal = Goal(
         title=goal_data.title, 
         description=goal_data.description,
+        success_criteria=goal_data.success_criteria,
         start_datetime=goal_data.start_datetime, 
         end_datetime=goal_data.end_datetime, 
         completion_rule=goal_data.completion_rule,

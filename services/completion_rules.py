@@ -127,10 +127,9 @@ def _metric_definitions(session: Session, entity: Goal | Milestone | Task) -> li
         statement = statement.where(MetricDefinition.goal_id == entity.id)
     elif isinstance(entity, Task):
         statement = statement.where(MetricDefinition.task_id == entity.id)
-    elif task_ids:
-        statement = statement.where(MetricDefinition.task_id.in_(task_ids))
     else:
-        return []
+        own_metric = MetricDefinition.milestone_id == entity.id
+        statement = statement.where(own_metric | MetricDefinition.task_id.in_(task_ids)) if task_ids else statement.where(own_metric)
     return list(session.exec(statement.order_by(MetricDefinition.position, MetricDefinition.id)).all())
 
 
@@ -210,6 +209,12 @@ def _consistency_progress(
         return None, False, rule
     window_days = max(1, int(rule.get("window_days") or 7))
     todo_ids = _todo_ids_for_entity(session, entity)
+    configured_ids = rule.get("todo_ids")
+    if not isinstance(configured_ids, list):
+        configured_ids = [rule.get("todo_id")] if rule.get("todo_id") else []
+    if configured_ids:
+        allowed_ids = {str(todo_id): todo_id for todo_id in todo_ids}
+        todo_ids = [allowed_ids[str(todo_id)] for todo_id in configured_ids if str(todo_id) in allowed_ids]
     if not todo_ids:
         return 0.0, False, {**rule, "current_done": 0, "window_days": window_days}
     today = datetime.now(JST).date()
@@ -335,5 +340,12 @@ def recalculate_for_occurrence(session: Session, occurrence: TodoOccurrence) -> 
 def recalculate_for_metric(session: Session, metric: MetricDefinition) -> None:
     if metric.task_id:
         recalculate_task_hierarchy(session, metric.task_id)
+    elif metric.milestone_id:
+        milestone = session.get(Milestone, metric.milestone_id)
+        if milestone is not None and milestone.deleted_at is None:
+            _apply_result(session, milestone)
+            goal = session.get(Goal, milestone.goal_id) if milestone.goal_id else None
+            if goal is not None and goal.deleted_at is None:
+                _apply_result(session, goal)
     else:
         recalculate_goal_hierarchy(session, metric.goal_id)

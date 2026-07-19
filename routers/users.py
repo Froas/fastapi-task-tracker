@@ -2,7 +2,19 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Annotated
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from models import User, UserBase, UserRead, UserUpdate, Token, verify_password, create_access_token, get_current_active_user
+from models import (
+    User,
+    UserBase,
+    UserRead,
+    UserUpdate,
+    Token,
+    RefreshTokenRequest,
+    verify_password,
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    get_current_active_user,
+)
 from sqlmodel import Session, select
 from db import get_session
 from dotenv import load_dotenv
@@ -15,10 +27,34 @@ load_dotenv()
 try:
     ACCESS_TOKEN_EXPIRE_MINUTES = max(
         1,
-        int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '1440')),
+        int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '60')),
     )
 except ValueError:
-    ACCESS_TOKEN_EXPIRE_MINUTES = 1440
+    ACCESS_TOKEN_EXPIRE_MINUTES = 60
+
+try:
+    REFRESH_TOKEN_EXPIRE_DAYS = max(
+        1,
+        int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', '30')),
+    )
+except ValueError:
+    REFRESH_TOKEN_EXPIRE_DAYS = 30
+
+
+def issue_token_pair(user_id: uuid.UUID) -> Token:
+    subject = {"sub": str(user_id)}
+    return Token(
+        access_token=create_access_token(
+            data=subject,
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+        ),
+        refresh_token=create_refresh_token(
+            data=subject,
+            expires_delta=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+        ),
+        token_type="bearer",
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
 
 def authenticate_user(session: Session, username: str, password: str):
@@ -144,12 +180,24 @@ async def login_for_access_token(
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": str(user.id)},
-        expires_delta=access_token_expires
-    )
-    return Token(access_token=access_token, token_type='bearer')
+    return issue_token_pair(user.id)
+
+
+@users_router.post('/refresh', response_model=Token)
+async def refresh_access_token(
+    payload: RefreshTokenRequest,
+    session: Session = Depends(get_session),
+) -> Token:
+    token_data = decode_refresh_token(payload.refresh_token)
+    try:
+        user_id = uuid.UUID(token_data.sub)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Could not validate refresh token")
+    user = session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Could not validate refresh token")
+    # Return a new pair so an active session keeps sliding forward.
+    return issue_token_pair(user.id)
 
 
 

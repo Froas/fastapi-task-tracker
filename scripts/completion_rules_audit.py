@@ -187,6 +187,37 @@ def audit_outcome_rule() -> None:
     assert reopened["completion_rule"]["current_value"] == 95
 
 
+def audit_milestone_outcome_rule() -> None:
+    goal = create_goal("Milestone metric goal", {"type": "structural"})
+    milestone = require(client.post("/user/milestones", json={
+        "title": "Reach 95 kg",
+        "goal_id": goal["id"],
+        "completion_rule": {
+            "type": "metric_target",
+            "metric_name": "Milestone weight",
+            "start_value": 100,
+            "target_value": 95,
+            "direction": "decrease",
+        },
+    }))
+    metric = require(client.post("/user/metric-definitions", json={
+        "name": "Milestone weight",
+        "unit": "kg",
+        "input_type": "number",
+        "goal_id": goal["id"],
+        "milestone_id": milestone["id"],
+    }))
+    assert metric["milestone_id"] == milestone["id"]
+    require(client.post("/user/metric-entries/upsert", json={
+        "metric_definition_id": metric["id"],
+        "date": today.isoformat(),
+        "numeric_value": 95,
+    }))
+    completed = get_goal(goal["id"])
+    assert completed["milestones"][0]["status"] == "finished"
+    assert completed["status"] == "finished"
+
+
 def audit_consistency_rule() -> None:
     goal = create_goal("Consistency goal", {
         "type": "consistency",
@@ -205,6 +236,34 @@ def audit_consistency_rule() -> None:
         "task_id": routine["id"],
         "repeat_interval": "daily",
     }))
+    distractor_routine = require(client.post("/user/tasks", json={
+        "title": "Unrelated routine",
+        "goal_id": goal["id"],
+        "scope": "goal",
+        "kind": "routine",
+    }))
+    distractor = require(client.post("/user/todos", json={
+        "title": "Unrelated rep",
+        "task_id": distractor_routine["id"],
+        "repeat_interval": "daily",
+    }))
+    require(client.patch("/user/goals/update", json={
+        "id": goal["id"],
+        "completion_rule": {
+            "type": "consistency",
+            "label": "Two selected reps",
+            "todo_id": todo["id"],
+            "required_done": 2,
+            "window_days": 7,
+        },
+    }))
+    distractor_occurrence = next(
+        item for item in require(client.get("/user/todo-occurrences/today")) if item["todo_id"] == distractor["id"]
+    )
+    require(client.patch("/user/todo-occurrences/update", json={"id": distractor_occurrence["id"], "status": "done"}))
+    isolated = get_goal(goal["id"])
+    assert isolated["status"] != "finished"
+    assert isolated["completion_rule"]["current_done"] == 0
     today_occurrence = next(
         item for item in require(client.get("/user/todo-occurrences/today")) if item["todo_id"] == todo["id"]
     )
@@ -296,6 +355,7 @@ def audit_hybrid_rule() -> None:
 
 run_check("structural task → milestone → goal completion and next unlock", audit_structural_and_unlocking)
 run_check("outcome metric target completion", audit_outcome_rule)
+run_check("milestone-owned outcome metric completion", audit_milestone_outcome_rule)
 run_check("consistency occurrence completion", audit_consistency_rule)
 run_check("hybrid weighted completion waits for every configured lane", audit_hybrid_rule)
 
