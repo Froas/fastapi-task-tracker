@@ -53,3 +53,10 @@ class TodoOccurrenceRead(TodoOccurrenceBase):
     goal_title: Optional[str] = None
     milestone_id: Optional[uuid.UUID] = None
     milestone_title: Optional[str] = None
+    tracking_mode: Optional[str] = None
+    tracking_state: Optional[str] = None
+    routine_series_key: Optional[str] = None
+    stage_order: int = 1
+    tracking_current_done: Optional[int] = None
+    tracking_required_done: Optional[int] = None
+    tracking_window_days: Optional[int] = None

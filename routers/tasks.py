@@ -3,10 +3,13 @@ from models import Goal, Milestone, Task, TaskBase, TaskUpdate, TaskReadNested, 
 from typing import Annotated
 from routers.visibility import active_goal_ids, active_milestone_ids
 from services.completion_rules import recalculate_goal_hierarchy, recalculate_task_hierarchy
+from services.tracking import activate_tracking_for_milestone
 from sqlmodel import Session, select
 from sqlalchemy.orm import selectinload, noload
 from routers.users import User
 from db import get_session
+from datetime import datetime
+from utils.timezone import JST
 import uuid
 
 tasks_router = APIRouter()
@@ -27,6 +30,13 @@ def _normalize_task_scope(scope: str | None, goal_id: uuid.UUID | None, mileston
     if normalized not in VALID_TASK_SCOPES:
         raise HTTPException(status_code=400, detail="Task scope must be goal or milestone")
     return normalized
+
+
+def _validate_kind_scope(kind: str, scope: str) -> None:
+    if kind == "routine" and scope != "goal":
+        raise HTTPException(status_code=400, detail="Routine tasks belong to a goal")
+    if kind in {"project", "challenge"} and scope != "milestone":
+        raise HTTPException(status_code=400, detail="Project and challenge tasks belong to a milestone")
 
 @tasks_router.get('/user/tasks')
 async def get_all_task(
@@ -74,6 +84,7 @@ async def create_task(
 ) -> Task:
     kind = _normalize_task_kind(task_data.kind)
     scope = _normalize_task_scope(task_data.scope, task_data.goal_id, task_data.milestone_id)
+    _validate_kind_scope(kind, scope)
     goal_id = task_data.goal_id
     milestone_id = task_data.milestone_id
 
@@ -127,6 +138,14 @@ async def create_task(
         )
         .order_by(Task.position.desc())
     ).first()
+    completion_rule = task_data.completion_rule
+    if kind == "challenge" and not completion_rule:
+        completion_rule = {
+            "type": "consistency",
+            "label": task_data.title,
+            "required_done": 7,
+            "window_days": 7,
+        }
     task = Task(
         title=task_data.title, 
         description=task_data.description, 
@@ -142,11 +161,19 @@ async def create_task(
         kind=kind,
         scope=scope,
         position=(max_position or 0) + 1,
-        completion_rule=task_data.completion_rule,
+        completion_rule=completion_rule,
         user_id=current_user.id, 
         user=current_user
     )
     session.add(task)
+    if (
+        kind == "challenge"
+        and task.status in {StatusType.STARTED, StatusType.IN_PROGRESS}
+        and milestone.status == StatusType.OUTSTANDING
+    ):
+        milestone.status = StatusType.STARTED
+        session.add(milestone)
+    session.flush()
     recalculate_task_hierarchy(session, task.id)
     session.commit()
     session.refresh(task)    
@@ -167,6 +194,12 @@ async def update_task(
     next_kind = _normalize_task_kind(task_data.kind) if task_data.kind is not None else task.kind
     next_goal_id = task_data.goal_id if task_data.goal_id is not None else task.goal_id
     next_milestone_id = task_data.milestone_id if task_data.milestone_id is not None else task.milestone_id
+    if (
+        next_kind != task.kind
+        or next_scope != task.scope
+        or next_milestone_id != task.milestone_id
+    ):
+        _validate_kind_scope(next_kind, next_scope)
 
     if next_scope == "goal":
         if next_goal_id is None:
@@ -205,6 +238,13 @@ async def update_task(
         next_goal_id = milestone.goal_id
     
     update_data = task_data.model_dump(exclude_unset=True, exclude={'id'})
+    if next_kind == "challenge" and not (task_data.completion_rule or task.completion_rule):
+        update_data['completion_rule'] = {
+            "type": "consistency",
+            "label": task_data.title or task.title,
+            "required_done": 7,
+            "window_days": 7,
+        }
     if 'status' in update_data and task.completion_rule:
         task.completion_rule = {**task.completion_rule, 'auto_completed': False}
     update_data['kind'] = next_kind
@@ -233,6 +273,15 @@ async def update_task(
     for key, value in update_data.items():
         setattr(task, key, value)
     session.add(task)
+    if (
+        next_kind == "challenge"
+        and task.status in {StatusType.STARTED, StatusType.IN_PROGRESS}
+        and next_scope == "milestone"
+    ):
+        if milestone.status == StatusType.OUTSTANDING:
+            milestone.status = StatusType.STARTED
+            session.add(milestone)
+        activate_tracking_for_milestone(session, milestone, active_from=datetime.now(JST).date())
     recalculate_task_hierarchy(
         session,
         task.id,

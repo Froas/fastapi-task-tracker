@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel, Field, Relationship
 from typing import Optional, List, TYPE_CHECKING
-from datetime import datetime
+from datetime import date as Date, datetime
 from utils.timezone import JST
 from .enums import StatusType, PriorityType
 import uuid
@@ -23,6 +23,14 @@ class TodoBase(SQLModel):
     status: Optional[StatusType] = Field(default=StatusType.OUTSTANDING)
     start_datetime: Optional[datetime] = Field(default_factory=lambda: datetime.now(JST))
     task_id: Optional[uuid.UUID] = Field(foreign_key='task.id', default=None)
+    # Tracking lifecycle. NULL means a legacy definition whose visibility is
+    # inferred from its existing task/milestone hierarchy.
+    tracking_mode: Optional[str] = Field(default=None, index=True)
+    tracking_state: Optional[str] = Field(default=None, index=True)
+    routine_series_key: Optional[str] = Field(default=None, index=True)
+    stage_order: int = Field(default=1)
+    active_from: Optional[Date] = Field(default=None, index=True)
+    graduated_at: Optional[datetime] = None
 
 class Todo(TodoBase, table=True):
     id: Optional[uuid.UUID] = Field(primary_key=True, default_factory=uuid.uuid4)
@@ -47,6 +55,12 @@ class TodoUpdate(SQLModel):
     due_date: Optional[datetime] = None
     task_id: Optional[uuid.UUID] = None
     position: Optional[int] = None
+    tracking_mode: Optional[str] = None
+    tracking_state: Optional[str] = None
+    routine_series_key: Optional[str] = None
+    stage_order: Optional[int] = None
+    active_from: Optional[Date] = None
+    graduated_at: Optional[datetime] = None
     
 class TodoRead(TodoBase):
     id: uuid.UUID

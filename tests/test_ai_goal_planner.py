@@ -12,7 +12,9 @@ from services.ai_goal_planner import (
     _gemini_response_schema,
     _goal_plan_schema,
     _infer_horizon_days,
+    _normalize_draft,
     _normalize_plan_shape,
+    _planning_context,
     ai_goal_planner_config,
     get_goal_plan_provider,
     normalize_milestone_refinement,
@@ -21,6 +23,37 @@ from services.ai_goal_planner import (
 
 
 class AIGoalPlannerTests(unittest.TestCase):
+    def test_goal_routines_are_not_duplicated_as_milestone_todos(self):
+        draft = _normalize_draft({
+            "title": "Recovery OS",
+            "success_criteria": "The recovery floor is stable.",
+            "duration_days": 30,
+            "priority": "high",
+            "metric": None,
+            "routines": [{
+                "title": "Phone outside bedroom",
+                "repeat_interval": "daily",
+            }],
+            "milestones": [{
+                "title": "Stabilize inputs",
+                "due_day": 7,
+                "tasks": [{
+                    "title": "Build the sleep guardrail",
+                    "success_criteria": "The guardrail runs for a week.",
+                    "subtasks": [],
+                    "todos": [
+                        {"title": "Phone outside bedroom", "repeat_interval": "daily"},
+                        {"title": "Set shutdown alarm", "repeat_interval": "daily"},
+                    ],
+                }],
+            }],
+        })
+
+        self.assertEqual(
+            [todo["title"] for todo in draft["milestones"][0]["tasks"][0]["todos"]],
+            ["Set shutdown alarm"],
+        )
+
     def test_gemini_is_the_default_provider_when_configured(self):
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}, clear=True):
             provider = get_goal_plan_provider()
@@ -53,6 +86,15 @@ class AIGoalPlannerTests(unittest.TestCase):
     def test_horizon_is_context_without_forcing_entity_counts(self):
         self.assertEqual(_infer_horizon_days("Become CTO within five years", []), 1825)
         self.assertEqual(_infer_horizon_days("Finish in 60 weeks", []), 420)
+        self.assertEqual(
+            _planning_context(74)["reference_milestone_range"],
+            {"from": 2, "to": 4},
+        )
+        self.assertEqual(
+            _planning_context(425)["reference_milestone_range"],
+            {"from": 5, "to": 8},
+        )
+        self.assertTrue(_planning_context(1825)["reference_only"])
         schema = _goal_plan_schema(ready_only=True)
         milestones = schema["properties"]["milestones"]
         self.assertEqual((milestones["minItems"], milestones["maxItems"]), (1, 12))
@@ -165,6 +207,7 @@ class AIGoalPlannerTests(unittest.TestCase):
         self.assertEqual(len(plan_call["input_payload"]["plan_shape"]["milestones"]), 2)
         self.assertEqual(result.payload["status"], "ready")
         self.assertIn("2 milestones, 2 tasks", result.payload["assumptions"][0])
+        self.assertIn("Soft reference: 2-4 milestones", result.payload["assumptions"][0])
         self.assertEqual((result.input_tokens, result.output_tokens, result.total_tokens), (30, 35, 65))
 
     def test_extracts_gemini_token_usage_including_thoughts(self):
@@ -286,16 +329,20 @@ class AIGoalPlannerTests(unittest.TestCase):
         ))
         blueprint = result["draft"]["blueprint"]
         self.assertEqual(result["status"], "ready")
-        self.assertEqual(blueprint["schema_version"], 2)
+        self.assertEqual(blueprint["schema_version"], 3)
         self.assertEqual(blueprint["success_criteria"], "Finish a half marathon event.")
         self.assertEqual(blueprint["completion_rule"]["type"], "metric_target")
         self.assertEqual(blueprint["milestones"][0]["success_criteria"], "Run 10 km comfortably.")
         self.assertEqual(blueprint["goal_tasks"][0]["kind"], "routine")
         task = blueprint["milestones"][0]["tasks"][0]
+        self.assertEqual(task["kind"], "challenge")
+        self.assertEqual(task["completion_rule"]["type"], "consistency")
         self.assertEqual(task["success_criteria"], "An eight-week plan is saved to the calendar.")
         self.assertEqual(task["subtasks"][0]["title"], "Compare two beginner plans")
         self.assertEqual(task["todos"][0]["title"], "Review the training week")
         self.assertEqual(task["todos"][0]["repeat_interval"], "weekly")
+        self.assertEqual(task["todos"][0]["tracking_mode"], "bounded")
+        self.assertEqual(task["todos"][0]["tracking_state"], "active")
 
     def test_long_horizon_plan_keeps_up_to_twelve_milestones(self):
         milestones = [

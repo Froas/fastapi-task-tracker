@@ -169,7 +169,8 @@ TASK_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
     "required": [
         "title", "description", "success_criteria", "subtasks", "todos",
-        "todo_repeat_interval",
+        "todo_repeat_interval", "kind", "tracking_mode", "routine_series_key",
+        "stage_order", "required_done", "window_days",
     ],
     "properties": {
         "title": {"type": "string", "minLength": 1, "maxLength": 160},
@@ -189,6 +190,12 @@ TASK_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": ["none", "daily", "weekly", "monthly"],
         },
+        "kind": {"type": "string", "enum": ["project", "challenge"]},
+        "tracking_mode": {"type": "string", "enum": ["none", "bounded", "staged"]},
+        "routine_series_key": {"type": "string", "maxLength": 120},
+        "stage_order": {"type": "integer", "minimum": 1, "maximum": 20},
+        "required_done": {"type": "integer", "minimum": 0, "maximum": 3650},
+        "window_days": {"type": "integer", "minimum": 0, "maximum": 3650},
     },
 }
 
@@ -336,6 +343,13 @@ For ready plans:
 - Add only the routines needed to support the plan; routines are not milestones.
 - Routines are stable goal-wide systems. Do not duplicate the same behavior in
   a goal routine and a task todo.
+- A milestone task with repeating todos is a challenge, not a project. Give it
+  required_done and window_days. Use bounded tracking when it ends after proof.
+- Use staged tracking when the same behavior becomes progressively harder across
+  milestones. Give every stage the same short routine_series_key and increasing
+  stage_order (for example bedtime: 01:00, then 00:30, then 00:00).
+- Project tasks use tracking_mode none, an empty routine_series_key, stage_order 1,
+  required_done 0, and window_days 0.
 - Use a numeric metric only when it honestly measures the outcome.
 - Make success criteria observable and specific.
 - Keep the plan achievable; do not promise medical, financial, or legal results.
@@ -347,6 +361,11 @@ PLAN_SHAPE_INSTRUCTIONS = """You size a TaskNest goal plan before details are ge
 Choose the right structure yourself; there is no calendar formula or preferred count.
 
 - Write titles, outcomes, and rationale in the requested locale.
+- planning_context may contain a reference_milestone_range. Treat it as a weak
+  calibration prior, never as a requirement. Start by considering it, then choose
+  fewer or more milestones whenever the transition analysis supports that choice.
+  If you go outside the reference, explain why in rationale. Never add filler to
+  reach its minimum or merge distinct outcomes merely to stay below its maximum.
 - First identify distinct workstreams, dependency transitions, uncertainty-reducing
   checkpoints, and independently verifiable changes in capability or product state.
 - Use one milestone when those elements share the same evidence of success. Use
@@ -441,6 +460,33 @@ def _infer_horizon_days(intent: str, answers: list[dict[str, str]]) -> int | Non
             candidates.append((target_date - date.today()).days)
 
     return max(7, min(3650, max(candidates))) if candidates else None
+
+
+def _planning_context(horizon_days: int | None) -> dict[str, Any]:
+    reference_range: dict[str, int] | None = None
+    if horizon_days is not None:
+        if horizon_days <= 90:
+            minimum, maximum = 2, 4
+        elif horizon_days <= 180:
+            minimum, maximum = 3, 5
+        elif horizon_days <= 420:
+            minimum, maximum = 4, 7
+        elif horizon_days <= 900:
+            minimum, maximum = 5, 8
+        elif horizon_days <= 1825:
+            minimum, maximum = 6, 10
+        else:
+            minimum, maximum = 7, 12
+        reference_range = {"from": minimum, "to": maximum}
+    return {
+        "duration_hint_days": horizon_days,
+        "reference_milestone_range": reference_range,
+        "reference_only": True,
+        "typical_tasks_per_milestone": {"from": 1, "to": 4},
+        "typical_subtasks_per_task": {"from": 0, "to": 4},
+        "typical_task_todos_per_task": {"from": 0, "to": 2},
+        "typical_goal_routines": {"from": 0, "to": 3},
+    }
 
 
 def _goal_plan_schema(*, ready_only: bool = False) -> dict[str, Any]:
@@ -594,19 +640,32 @@ def _normalize_planner_task(value: Any) -> dict[str, Any] | None:
             MAX_TODOS_PER_TASK,
             value.get("todo_repeat_interval"),
         ),
+        "kind": "challenge" if value.get("kind") == "challenge" or value.get("todos") else "project",
+        "tracking_mode": value.get("tracking_mode") if value.get("tracking_mode") in {"bounded", "staged"} else "none",
+        "routine_series_key": _text(value.get("routine_series_key"), max_length=120),
+        "stage_order": _integer(value.get("stage_order"), 1, 1, 20),
+        "required_done": _integer(value.get("required_done"), 7, 0, 3650),
+        "window_days": _integer(value.get("window_days"), 7, 0, 3650),
     }
 
 
-def _planner_task_to_blueprint(task: dict[str, Any], priority: str) -> dict[str, Any]:
+def _planner_task_to_blueprint(task: dict[str, Any], priority: str, *, active: bool) -> dict[str, Any]:
+    is_challenge = task["kind"] == "challenge" and bool(task["todos"])
+    tracking_mode = task["tracking_mode"] if task["tracking_mode"] in {"bounded", "staged"} else "bounded"
     return {
         "title": task["title"],
         "description": task["description"],
         "success_criteria": task["success_criteria"],
-        "kind": "project",
+        "kind": "challenge" if is_challenge else "project",
         "scope": "milestone",
         "priority": priority,
-        "status": "outstanding",
-        "completion_rule": {"type": "structural"},
+        "status": "started" if is_challenge and active else "outstanding",
+        "completion_rule": {
+            "type": "consistency",
+            "label": task["title"],
+            "required_done": max(1, task["required_done"] or 7),
+            "window_days": max(1, task["window_days"] or 7),
+        } if is_challenge else {"type": "structural"},
         "subtasks": [
             {
                 "title": step["title"],
@@ -623,6 +682,10 @@ def _planner_task_to_blueprint(task: dict[str, Any], priority: str) -> dict[str,
                 "repeat_interval": todo["repeat_interval"],
                 "priority": priority,
                 "status": "outstanding",
+                "tracking_mode": tracking_mode,
+                "tracking_state": "active" if active else "planned",
+                "routine_series_key": task["routine_series_key"] or None,
+                "stage_order": task["stage_order"],
             }
             for todo in task["todos"]
         ],
@@ -665,6 +728,12 @@ def _normalize_draft(value: Any) -> dict[str, Any]:
                 "success_criteria": f"A concrete next action for {milestone_title} is defined.",
                 "subtasks": [],
                 "todos": [],
+                "kind": "project",
+                "tracking_mode": "none",
+                "routine_series_key": "",
+                "stage_order": 1,
+                "required_done": 0,
+                "window_days": 0,
             }]
         default_due = round(duration_days * (index + 1) / max(1, len(raw_milestones)))
         milestones.append({
@@ -698,6 +767,20 @@ def _normalize_draft(value: Any) -> dict[str, Any]:
             "description": _text(item.get("description"), max_length=500),
             "repeat_interval": repeat_interval,
         })
+
+    # The model is instructed not to repeat a stable goal routine inside a
+    # milestone task, but enforce that invariant deterministically as well.
+    # Otherwise one behavior becomes two TodoDefinitions and Today asks the
+    # user to check the same action twice.
+    goal_routine_titles = {routine["title"].casefold() for routine in routines}
+    if goal_routine_titles:
+        for milestone in milestones:
+            for task in milestone["tasks"]:
+                task["todos"] = [
+                    todo
+                    for todo in task["todos"]
+                    if todo["title"].casefold() not in goal_routine_titles
+                ]
 
     metric: dict[str, Any] | None = None
     raw_metric = value.get("metric")
@@ -747,9 +830,9 @@ def draft_to_blueprint(draft: dict[str, Any]) -> dict[str, Any]:
         })
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "source": {"type": "scratch", "source_title": "AI-assisted plan"},
-        "status": "outstanding",
+        "status": "started",
         "priority": draft["priority"],
         "duration_days": draft["duration_days"],
         "success_criteria": draft["success_criteria"],
@@ -770,6 +853,8 @@ def draft_to_blueprint(draft: dict[str, Any]) -> dict[str, Any]:
                     "repeat_interval": routine["repeat_interval"],
                     "priority": draft["priority"],
                     "status": "outstanding",
+                    "tracking_mode": "ongoing",
+                    "tracking_state": "active",
                 }],
             }
             for routine in draft["routines"]
@@ -779,16 +864,16 @@ def draft_to_blueprint(draft: dict[str, Any]) -> dict[str, Any]:
                 "title": milestone["title"],
                 "description": milestone["description"],
                 "success_criteria": milestone["success_criteria"],
-                "status": "outstanding",
+                "status": "started" if milestone_index == 0 else "outstanding",
                 "priority": draft["priority"],
                 "due_date_offset_days": milestone["due_day"],
                 "completion_rule": {"type": "structural"},
                 "tasks": [
-                    _planner_task_to_blueprint(task, draft["priority"])
+                    _planner_task_to_blueprint(task, draft["priority"], active=milestone_index == 0)
                     for task in milestone["tasks"]
                 ],
             }
-            for milestone in draft["milestones"]
+            for milestone_index, milestone in enumerate(draft["milestones"])
         ],
     }
 
@@ -862,6 +947,7 @@ def normalize_milestone_refinement(
             tasks.append(_planner_task_to_blueprint(
                 normalized_task,
                 blueprint.get("priority") or current.get("priority") or "medium",
+                active=current.get("status") in {"started", "in progress"},
             ))
     if not tasks:
         raise AIPlannerResponseError("The replacement milestone did not include any usable tasks")
@@ -957,6 +1043,7 @@ class _GoalPlanRequestMixin:
         safety_identifier: str,
     ) -> ProviderResult:
         horizon_days = _infer_horizon_days(intent, answers)
+        planning_context = _planning_context(horizon_days)
         ready_only = bool(answers)
         shape_result: ProviderResult | None = None
         plan_shape: dict[str, Any] | None = None
@@ -969,7 +1056,7 @@ class _GoalPlanRequestMixin:
                     "locale": locale,
                     "intent": intent,
                     "clarification_answers": answers,
-                    "planning_context": {"duration_hint_days": horizon_days},
+                    "planning_context": planning_context,
                 },
                 safety_identifier=safety_identifier,
                 max_output_tokens=1800,
@@ -990,7 +1077,7 @@ class _GoalPlanRequestMixin:
                 "locale": locale,
                 "intent": intent,
                 "clarification_answers": answers,
-                "planning_context": {"duration_hint_days": horizon_days},
+                "planning_context": planning_context,
                 "plan_shape": plan_shape,
                 "response_mode": "ready" if ready_only else "clarify_or_ready",
             },
@@ -1008,10 +1095,21 @@ class _GoalPlanRequestMixin:
                 milestone["task_count"]
                 for milestone in plan_shape["milestones"]
             )
-            shape_note = (
-                f"Plan shape: {len(plan_shape['milestones'])} milestones, "
-                f"{selected_tasks} tasks. {plan_shape['rationale']}"
+            reference = planning_context.get("reference_milestone_range")
+            reference_note = (
+                f" Soft reference: {reference['from']}-{reference['to']} milestones."
+                if isinstance(reference, dict)
+                else ""
             )
+            note_prefix = (
+                f"Plan shape: {len(plan_shape['milestones'])} milestones, "
+                f"{selected_tasks} tasks.{reference_note}"
+            )
+            rationale = plan_shape["rationale"]
+            rationale_limit = max(0, 239 - len(note_prefix))
+            if len(rationale) > rationale_limit:
+                rationale = f"{rationale[:max(0, rationale_limit - 1)].rstrip()}…"
+            shape_note = f"{note_prefix} {rationale}".strip()
         return ProviderResult(
             payload={
                 "status": "ready",

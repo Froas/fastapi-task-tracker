@@ -45,6 +45,12 @@ class BackupTodo(BaseModel):
     priority: PriorityType | None = PriorityType.LOW
     task_id: str | None = None
     position: int | None = 0
+    tracking_mode: str | None = None
+    tracking_state: str | None = None
+    routine_series_key: str | None = None
+    stage_order: int | None = 1
+    active_from: Date | None = None
+    graduated_at: datetime | None = None
 
 
 class BackupSubtask(BaseModel):
@@ -244,6 +250,12 @@ def _serialize_todo(todo: Todo) -> dict:
         'priority': _priority(todo.priority),
         'task_id': str(todo.task_id) if todo.task_id else None,
         'position': todo.position or 0,
+        'tracking_mode': todo.tracking_mode,
+        'tracking_state': todo.tracking_state,
+        'routine_series_key': todo.routine_series_key,
+        'stage_order': todo.stage_order,
+        'active_from': todo.active_from,
+        'graduated_at': todo.graduated_at,
     }
 
 
@@ -676,6 +688,12 @@ async def import_backup(
             priority=todo_data.priority or PriorityType.LOW,
             task_id=new_task_id,
             position=todo_data.position or 0,
+            tracking_mode=todo_data.tracking_mode,
+            tracking_state=todo_data.tracking_state,
+            routine_series_key=todo_data.routine_series_key,
+            stage_order=todo_data.stage_order or 1,
+            active_from=todo_data.active_from,
+            graduated_at=todo_data.graduated_at,
             user_id=current_user.id,
             user=current_user,
         )

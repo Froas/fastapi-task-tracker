@@ -31,6 +31,7 @@ from models import (
     User,
     get_current_active_user,
 )
+from services.tracking import inferred_tracking_defaults
 from utils.timezone import JST
 
 
@@ -170,8 +171,18 @@ def _create_todo_definition(
     start_dt: datetime,
 ) -> Todo:
     repeat_interval = "daily"
-    if isinstance(todo_data, dict):
-        repeat_interval = str(todo_data.get("repeat_interval") or todo_data.get("recurrence") or "daily")
+    data = todo_data if isinstance(todo_data, dict) else {}
+    if data:
+        repeat_interval = str(data.get("repeat_interval") or data.get("recurrence") or "daily")
+
+    tracking_mode, tracking_state, series_key, stage_order = inferred_tracking_defaults(
+        session,
+        task,
+        tracking_mode=data.get("tracking_mode"),
+        tracking_state=data.get("tracking_state"),
+        series_key=data.get("routine_series_key"),
+        stage_order=int(data.get("stage_order") or 1),
+    )
 
     todo = Todo(
         title=_title(todo_data, f"Routine {position + 1}"),
@@ -182,6 +193,10 @@ def _create_todo_definition(
         status=_status(todo_data.get("status") if isinstance(todo_data, dict) else None),
         priority=_priority(todo_data.get("priority") if isinstance(todo_data, dict) else None),
         task_id=task.id,
+        tracking_mode=tracking_mode,
+        tracking_state=tracking_state,
+        routine_series_key=series_key,
+        stage_order=stage_order,
         position=position,
         user_id=user.id,
     )
@@ -248,8 +263,48 @@ def _create_task(
 
     for subtask_index, subtask_data in enumerate(_items(data.get("subtasks"))):
         _create_subtask(session, user, subtask_data, task, subtask_index, start_dt)
-    for todo_index, todo_data in enumerate(_items(data.get("todos"))):
-        _create_todo_definition(session, user, todo_data, task, todo_index, start_dt)
+    reusable_goal_todos: dict[str, Todo] = {}
+    if task.kind == "challenge" and milestone is not None:
+        goal_routine_todos = session.exec(
+            select(Todo).join(Task, Todo.task_id == Task.id).where(
+                Todo.user_id == user.id,
+                Todo.deleted_at.is_(None),
+                Todo.repeat_interval.isnot(None),
+                Task.goal_id == goal.id,
+                Task.scope == "goal",
+                Task.kind == "routine",
+                Task.deleted_at.is_(None),
+            )
+        ).all()
+        reusable_goal_todos = {item.title.strip().casefold(): item for item in goal_routine_todos}
+    reused_todo_ids: list[str] = []
+    created_todo_position = 0
+    for todo_data in _items(data.get("todos")):
+        reusable = reusable_goal_todos.get(_title(todo_data, "").strip().casefold())
+        if reusable is not None:
+            reused_todo_ids.append(str(reusable.id))
+            continue
+        _create_todo_definition(session, user, todo_data, task, created_todo_position, start_dt)
+        created_todo_position += 1
+    if task.kind == "challenge" and not task.completion_rule and _items(data.get("todos")):
+        task.completion_rule = {
+            "type": "consistency",
+            "label": task.title,
+            "required_done": int(data.get("required_done") or 7),
+            "window_days": int(data.get("window_days") or 7),
+        }
+        session.add(task)
+    if task.kind == "challenge" and reused_todo_ids:
+        rule = dict(task.completion_rule or {
+            "type": "consistency",
+            "label": task.title,
+            "required_done": int(data.get("required_done") or 7),
+            "window_days": int(data.get("window_days") or 7),
+        })
+        if rule.get("type") == "consistency" and not rule.get("todo_id") and not rule.get("todo_ids"):
+            rule["todo_ids"] = reused_todo_ids
+            task.completion_rule = rule
+            session.add(task)
     for metric_index, metric_data in enumerate(_items(data.get("metrics"))):
         _create_metric(session, user, metric_data, goal, task, metric_index)
 
@@ -492,6 +547,10 @@ def _goal_to_blueprint(session: Session, user: User, goal: Goal) -> dict[str, An
                 "repeat_interval": todo.repeat_interval,
                 "priority": _enum_value(todo.priority),
                 "status": _enum_value(todo.status),
+                "tracking_mode": todo.tracking_mode,
+                "tracking_state": todo.tracking_state,
+                "routine_series_key": todo.routine_series_key,
+                "stage_order": todo.stage_order,
             })
             for todo in todos_by_task.get(task.id, [])
         ]
@@ -530,7 +589,7 @@ def _goal_to_blueprint(session: Session, user: User, goal: Goal) -> dict[str, An
             tasks_by_milestone.setdefault(task.milestone_id, []).append(task)
 
     return _without_none({
-        "schema_version": 1,
+        "schema_version": 3,
         "source": {
             "type": "goal",
             "source_id": str(goal.id),

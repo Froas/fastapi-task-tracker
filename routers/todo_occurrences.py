@@ -20,6 +20,7 @@ from models import (
 from routers.daily_lifecycle import ensure_occurrences_for_date, finalize_past_days, logical_today
 from utils.timezone import JST
 from services.completion_rules import recalculate_for_occurrence
+from services.tracking import advance_tracking_after_occurrence, tracking_consumer_for_todo, tracking_progress
 
 
 todo_occurrences_router = APIRouter()
@@ -57,6 +58,8 @@ def _read_occurrence(session: Session, occurrence: TodoOccurrence) -> TodoOccurr
     task = session.get(Task, todo.task_id) if todo and todo.task_id else None
     milestone = session.get(Milestone, task.milestone_id) if task and task.milestone_id else None
     goal = _goal_for_task(session, task, milestone)
+    progress_task = tracking_consumer_for_todo(session, todo, task) if todo else None
+    current_done, required_done, window_days = tracking_progress(progress_task or task)
 
     return TodoOccurrenceRead(
         id=occurrence.id,
@@ -80,6 +83,13 @@ def _read_occurrence(session: Session, occurrence: TodoOccurrence) -> TodoOccurr
         goal_title=goal.title if goal else None,
         milestone_id=milestone.id if milestone else None,
         milestone_title=milestone.title if milestone else None,
+        tracking_mode=todo.tracking_mode if todo else None,
+        tracking_state=todo.tracking_state if todo else None,
+        routine_series_key=todo.routine_series_key if todo else None,
+        stage_order=todo.stage_order if todo else 1,
+        tracking_current_done=current_done,
+        tracking_required_done=required_done,
+        tracking_window_days=window_days,
     )
 
 
@@ -195,6 +205,8 @@ async def update_todo_occurrence(
     occurrence.updated_at = datetime.now(JST)
     session.add(occurrence)
     recalculate_for_occurrence(session, occurrence)
+    session.flush()
+    advance_tracking_after_occurrence(session, occurrence)
     session.commit()
     session.refresh(occurrence)
     return _read_occurrence(session, occurrence)

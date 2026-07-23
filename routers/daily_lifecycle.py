@@ -1,10 +1,22 @@
 from datetime import date as Date, datetime, timedelta
 from typing import Iterable
+import uuid
 
 from sqlmodel import Session, select
 
-from models import DailyDraftTodo, DailyLog, MetricEntry, Todo, TodoOccurrence, User
+from models import (
+    DailyDraftTodo,
+    DailyLog,
+    MetricEntry,
+    Milestone,
+    StatusType,
+    Task,
+    Todo,
+    TodoOccurrence,
+    User,
+)
 from routers.visibility import active_recurring_todo_ids
+from services.tracking import todo_is_explicitly_active
 from utils.timezone import JST
 
 
@@ -13,6 +25,7 @@ FINALIZER_LOOKBACK_DAYS = 14
 FINALIZED_BY_AUTO = "auto"
 COMPLETED_OCCURRENCE_STATUSES = {"done", "minimum"}
 MEANINGFUL_OCCURRENCE_STATUSES = {"done", "minimum", "skipped", "excused"}
+CURRENT_MILESTONE_STATUSES = {StatusType.STARTED, StatusType.IN_PROGRESS}
 
 
 def logical_today(now: datetime | None = None) -> Date:
@@ -45,8 +58,34 @@ def _log_for_date(session: Session, user: User, selected_date: Date) -> DailyLog
     return log
 
 
-def _active_recurring_todos(session: Session, user: User) -> list[Todo]:
-    return session.exec(
+def _current_milestone_ids(milestones: Iterable[Milestone]) -> set[uuid.UUID]:
+    """Pick the milestone scopes whose routines belong on Today.
+
+    Explicitly started milestones win. When a goal has no explicitly current
+    milestone, its first outstanding milestone is the implicit current one.
+    This keeps existing plans useful while preventing every future milestone
+    from generating occurrences at once.
+    """
+    by_goal: dict[uuid.UUID, list[Milestone]] = {}
+    for milestone in milestones:
+        if milestone.goal_id is not None:
+            by_goal.setdefault(milestone.goal_id, []).append(milestone)
+
+    selected: set[uuid.UUID] = set()
+    for goal_milestones in by_goal.values():
+        ordered = sorted(goal_milestones, key=lambda item: (item.position, str(item.id)))
+        explicit = [item for item in ordered if item.status in CURRENT_MILESTONE_STATUSES]
+        current = explicit or next(
+            ([item] for item in ordered if item.status == StatusType.OUTSTANDING),
+            [],
+        )
+        selected.update(item.id for item in current if item.id is not None)
+    return selected
+
+
+def _active_recurring_todos(session: Session, user: User, selected_date: Date | None = None) -> list[Todo]:
+    occurrence_date = selected_date or logical_today()
+    todos = session.exec(
         select(Todo)
         .where(
             Todo.user_id == user.id,
@@ -54,21 +93,120 @@ def _active_recurring_todos(session: Session, user: User) -> list[Todo]:
         )
         .order_by(Todo.task_id, Todo.position, Todo.id)
     ).all()
+    if not todos:
+        return []
+
+    task_ids = {todo.task_id for todo in todos if todo.task_id is not None}
+    tasks = session.exec(
+        select(Task).where(
+            Task.user_id == user.id,
+            Task.id.in_(task_ids),
+        )
+    ).all()
+    tasks_by_id = {task.id: task for task in tasks}
+
+    referenced_milestone_ids = {
+        task.milestone_id for task in tasks if task.milestone_id is not None
+    }
+    referenced_milestones = session.exec(
+        select(Milestone).where(
+            Milestone.user_id == user.id,
+            Milestone.id.in_(referenced_milestone_ids),
+            Milestone.deleted_at.is_(None),
+        )
+    ).all() if referenced_milestone_ids else []
+    goal_ids = {task.goal_id for task in tasks if task.goal_id is not None}
+    goal_ids.update(
+        milestone.goal_id
+        for milestone in referenced_milestones
+        if milestone.goal_id is not None
+    )
+    goal_milestones = session.exec(
+        select(Milestone).where(
+            Milestone.user_id == user.id,
+            Milestone.goal_id.in_(goal_ids),
+            Milestone.deleted_at.is_(None),
+        )
+    ).all() if goal_ids else []
+    current_milestone_ids = _current_milestone_ids(goal_milestones)
+
+    active: list[Todo] = []
+    for todo in todos:
+        task = tasks_by_id.get(todo.task_id)
+        if task is None:
+            continue
+        if task.kind == "challenge" and isinstance(task.completion_rule, dict):
+            rule = task.completion_rule
+            consistency = rule.get("consistency") if rule.get("type") == "hybrid" else rule
+            if isinstance(consistency, dict) and consistency.get("type") == "consistency":
+                configured = consistency.get("todo_ids")
+                if not isinstance(configured, list):
+                    configured = [consistency.get("todo_id")] if consistency.get("todo_id") else []
+                configured_ids = {str(item) for item in configured if item}
+                own_ids = {str(item.id) for item in todos if item.task_id == task.id}
+                if configured_ids and configured_ids.isdisjoint(own_ids):
+                    # The challenge consumes an existing goal routine. Its
+                    # local definition is not a second checkbox on Today.
+                    continue
+        if todo.tracking_mode is not None:
+            if todo_is_explicitly_active(todo, occurrence_date):
+                active.append(todo)
+            continue
+        if (
+            task.scope == "goal"
+            or task.milestone_id is None
+            or task.milestone_id in current_milestone_ids
+        ):
+            active.append(todo)
+    # Legacy plans often stored the same definition once under the goal routine
+    # and again under the current milestone. Collapse only those legacy/null
+    # lifecycle duplicates; explicit challenge contracts are never guessed.
+    deduplicated: list[Todo] = []
+    legacy_index: dict[tuple[object, str, str], int] = {}
+    for todo in active:
+        task = tasks_by_id.get(todo.task_id)
+        if task is None or todo.tracking_mode is not None:
+            deduplicated.append(todo)
+            continue
+        key = (
+            task.goal_id or task.id,
+            " ".join(todo.title.split()).casefold(),
+            (todo.repeat_interval or "").casefold(),
+        )
+        existing_index = legacy_index.get(key)
+        if existing_index is None:
+            legacy_index[key] = len(deduplicated)
+            deduplicated.append(todo)
+            continue
+        existing = deduplicated[existing_index]
+        existing_task = tasks_by_id.get(existing.task_id)
+        if existing_task is not None and existing_task.scope != "goal" and task.scope == "goal":
+            deduplicated[existing_index] = todo
+    return deduplicated
 
 
 def ensure_occurrences_for_date(session: Session, user: User, selected_date: Date) -> list[TodoOccurrence]:
     daily_log = _log_for_date(session, user, selected_date)
-    todos = _active_recurring_todos(session, user)
+    todos = _active_recurring_todos(session, user, selected_date)
     todo_ids = [todo.id for todo in todos if todo.id is not None]
 
-    existing = session.exec(
+    all_existing = session.exec(
         select(TodoOccurrence).where(
             TodoOccurrence.user_id == user.id,
             TodoOccurrence.date == selected_date,
-            TodoOccurrence.todo_id.in_(todo_ids),
         )
-    ).all() if todo_ids else []
+    ).all()
+    existing = [occurrence for occurrence in all_existing if occurrence.todo_id in todo_ids]
     existing_by_todo = {occurrence.todo_id: occurrence for occurrence in existing}
+
+    # Open occurrences are generated prompts, not user history. If a routine
+    # leaves the active scope, remove its untouched prompt so the day finalizer
+    # cannot turn a hidden future-milestone item into `missed`. Completed,
+    # minimum, skipped, and excused facts are retained.
+    active_todo_ids = set(todo_ids)
+    for occurrence in all_existing:
+        if occurrence.todo_id not in active_todo_ids and occurrence.status == "open":
+            session.delete(occurrence)
 
     for todo in todos:
         if todo.id in existing_by_todo:

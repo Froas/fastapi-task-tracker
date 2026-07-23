@@ -7,6 +7,8 @@ from db import get_session
 from typing import Annotated
 from routers.visibility import active_goal_ids
 from services.completion_rules import recalculate_goal_hierarchy
+from services.tracking import activate_tracking_for_milestone
+from routers.daily_lifecycle import logical_today
 import uuid
 
 milestones_router = APIRouter()
@@ -116,6 +118,9 @@ async def update_milestone(
         milestone.completion_rule = {**milestone.completion_rule, 'auto_completed': False}
     for key, value in update_data.items():
         setattr(milestone, key, value)
+
+    if milestone.status in {StatusType.STARTED, StatusType.IN_PROGRESS}:
+        activate_tracking_for_milestone(session, milestone, active_from=logical_today())
 
     session.add(milestone)
     recalculate_goal_hierarchy(session, milestone.goal_id)

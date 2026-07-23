@@ -5,10 +5,20 @@ from routers.visibility import active_task_ids
 from sqlmodel import Session, select
 from routers.users import User
 from db import get_session
+from services.tracking import (
+    TRACKING_MODES,
+    TRACKING_STATES,
+    inferred_tracking_defaults,
+)
 import uuid
 
 
 todos_router = APIRouter()
+
+
+def _validate_tracking(value: str | None, allowed: set[str], field: str) -> None:
+    if value is not None and value.strip().lower() not in allowed:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}")
 
 @todos_router.get('/user/todos')
 async def get_all_todo(
@@ -60,6 +70,16 @@ async def create_todo(
         ).first()
         if task is None:
             raise HTTPException(status_code=404, detail='Task not found')
+    _validate_tracking(todo_data.tracking_mode, TRACKING_MODES, "tracking_mode")
+    _validate_tracking(todo_data.tracking_state, TRACKING_STATES, "tracking_state")
+    tracking_mode, tracking_state, series_key, stage_order = inferred_tracking_defaults(
+        session,
+        task,
+        tracking_mode=todo_data.tracking_mode,
+        tracking_state=todo_data.tracking_state,
+        series_key=todo_data.routine_series_key,
+        stage_order=todo_data.stage_order,
+    )
     max_position = session.exec(
         select(Todo.position)
         .where(
@@ -80,11 +100,25 @@ async def create_todo(
         start_datetime=todo_data.start_datetime,
         end_datetime=todo_data.end_datetime,
         task_id=todo_data.task_id,
+        tracking_mode=tracking_mode,
+        tracking_state=tracking_state,
+        routine_series_key=series_key,
+        stage_order=stage_order,
+        active_from=todo_data.active_from,
+        graduated_at=todo_data.graduated_at,
         user_id=current_user.id,
         user=current_user,
         position=(max_position or 0) + 1,
     )
     session.add(todo)
+    if task.kind == "challenge" and not task.completion_rule:
+        task.completion_rule = {
+            "type": "consistency",
+            "label": task.title,
+            "required_done": 7,
+            "window_days": 7,
+        }
+        session.add(task)
     session.commit()
     session.refresh(todo)
     return todo
@@ -110,7 +144,29 @@ async def update_todo(
         if task is None:
             raise HTTPException(status_code=404, detail='Task not found')
 
+    _validate_tracking(todo_data.tracking_mode, TRACKING_MODES, "tracking_mode")
+    _validate_tracking(todo_data.tracking_state, TRACKING_STATES, "tracking_state")
+
     update_data = todo_data.model_dump(exclude_unset=True, exclude={'id'})
+    target_task = task if todo_data.task_id is not None else session.get(Task, todo.task_id)
+    if target_task is not None and any(
+        key in update_data
+        for key in ("tracking_mode", "tracking_state", "routine_series_key", "stage_order", "task_id")
+    ):
+        tracking_mode, tracking_state, series_key, stage_order = inferred_tracking_defaults(
+            session,
+            target_task,
+            tracking_mode=update_data.get("tracking_mode", todo.tracking_mode),
+            tracking_state=update_data.get("tracking_state", todo.tracking_state),
+            series_key=update_data.get("routine_series_key", todo.routine_series_key),
+            stage_order=update_data.get("stage_order", todo.stage_order),
+        )
+        update_data.update({
+            "tracking_mode": tracking_mode,
+            "tracking_state": tracking_state,
+            "routine_series_key": series_key,
+            "stage_order": stage_order,
+        })
     if todo_data.task_id is not None and todo_data.task_id != todo.task_id and 'position' not in update_data:
         max_position = session.exec(
             select(Todo.position)

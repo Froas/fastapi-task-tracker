@@ -29,6 +29,12 @@ TERMINAL_STATUSES = {
     StatusType.ABORTED,
     StatusType.CANCELLED,
 }
+STARTED_ACTIVITY_STATUSES = {StatusType.STARTED}
+PROGRESS_ACTIVITY_STATUSES = {
+    StatusType.IN_PROGRESS,
+    StatusType.FINISHED,
+    StatusType.CLOSED,
+}
 
 
 @dataclass(frozen=True)
@@ -79,6 +85,51 @@ def _task_subtasks(session: Session, task_id: uuid.UUID) -> list[Subtask]:
     return list(session.exec(
         select(Subtask).where(Subtask.task_id == task_id).order_by(Subtask.position, Subtask.id)
     ).all())
+
+
+def _statuses_activity_level(statuses: Iterable[StatusType | None]) -> int:
+    """Return 0 for untouched, 1 for activated, and 2 for evidenced work."""
+    status_set = set(statuses)
+    if status_set & PROGRESS_ACTIVITY_STATUSES:
+        return 2
+    if status_set & STARTED_ACTIVITY_STATUSES:
+        return 1
+    return 0
+
+
+def _descendant_activity_level(session: Session, entity: Goal | Milestone | Task) -> int:
+    if isinstance(entity, Task):
+        subtasks = _task_subtasks(session, entity.id)
+        level = _statuses_activity_level(subtask.status for subtask in subtasks)
+        todos = list(session.exec(
+            select(Todo).where(
+                Todo.task_id == entity.id,
+                Todo.deleted_at.is_(None),
+            )
+        ).all())
+        level = max(level, _statuses_activity_level(todo.status for todo in todos))
+        todo_ids = [todo.id for todo in todos]
+        if todo_ids:
+            completed_occurrence = session.exec(
+                select(TodoOccurrence.id).where(
+                    TodoOccurrence.todo_id.in_(todo_ids),
+                    TodoOccurrence.status.in_(COMPLETED_OCCURRENCE_STATUSES),
+                ).limit(1)
+            ).first()
+            if completed_occurrence is not None:
+                return 2
+        return level
+
+    if isinstance(entity, Milestone):
+        return _statuses_activity_level(
+            task.status for task in _active_tasks_for_milestone(session, entity.id)
+        )
+
+    child_statuses: list[StatusType | None] = [
+        milestone.status for milestone in _active_milestones_for_goal(session, entity.id)
+    ]
+    child_statuses.extend(task.status for task in _goal_tasks(session, entity.id))
+    return _statuses_activity_level(child_statuses)
 
 
 def _task_ids_for_entity(session: Session, entity: Goal | Milestone | Task) -> list[uuid.UUID]:
@@ -213,8 +264,20 @@ def _consistency_progress(
     if not isinstance(configured_ids, list):
         configured_ids = [rule.get("todo_id")] if rule.get("todo_id") else []
     if configured_ids:
-        allowed_ids = {str(todo_id): todo_id for todo_id in todo_ids}
-        todo_ids = [allowed_ids[str(todo_id)] for todo_id in configured_ids if str(todo_id) in allowed_ids]
+        requested_ids: list[uuid.UUID] = []
+        for configured_id in configured_ids:
+            try:
+                requested_ids.append(uuid.UUID(str(configured_id)))
+            except (TypeError, ValueError):
+                continue
+        todo_ids = list(session.exec(
+            select(Todo.id).where(
+                Todo.id.in_(requested_ids),
+                Todo.user_id == entity.user_id,
+                Todo.deleted_at.is_(None),
+                Todo.repeat_interval.isnot(None),
+            )
+        ).all()) if requested_ids else []
     if not todo_ids:
         return 0.0, False, {**rule, "current_done": 0, "window_days": window_days}
     today = datetime.now(JST).date()
@@ -285,10 +348,25 @@ def _apply_result(session: Session, entity: Goal | Milestone | Task) -> RuleResu
         entity.status = StatusType.FINISHED
         next_rule["auto_completed"] = True
         session.add(entity)
-    elif not result.satisfied and next_rule.get("auto_completed") and entity.status == StatusType.FINISHED:
+    elif (
+        not result.satisfied
+        and next_rule.get("auto_completed")
+        and entity.status == StatusType.FINISHED
+        and not (isinstance(entity, Task) and entity.kind == "challenge")
+    ):
         entity.status = StatusType.IN_PROGRESS
         next_rule["auto_completed"] = False
         session.add(entity)
+    elif entity.status not in TERMINAL_STATUSES:
+        activity_level = _descendant_activity_level(session, entity)
+        if result.progress is not None and result.progress > 0:
+            activity_level = max(activity_level, 2)
+        if activity_level >= 2 and entity.status in {StatusType.OUTSTANDING, StatusType.STARTED}:
+            entity.status = StatusType.IN_PROGRESS
+            session.add(entity)
+        elif activity_level == 1 and entity.status == StatusType.OUTSTANDING:
+            entity.status = StatusType.STARTED
+            session.add(entity)
     if next_rule != getattr(entity, "completion_rule", None):
         entity.completion_rule = next_rule
         session.add(entity)
@@ -334,7 +412,30 @@ def recalculate_goal_hierarchy(session: Session, goal_id: uuid.UUID | None) -> N
 
 def recalculate_for_occurrence(session: Session, occurrence: TodoOccurrence) -> None:
     todo = session.get(Todo, occurrence.todo_id)
-    recalculate_task_hierarchy(session, todo.task_id if todo else None)
+    own_task_id = todo.task_id if todo else None
+    recalculate_task_hierarchy(session, own_task_id)
+
+    # A challenge may deliberately use an existing goal routine as its
+    # evidence source. Recalculate those consumers when that routine changes;
+    # otherwise their rule would only catch up after some unrelated edit.
+    occurrence_todo_id = str(occurrence.todo_id)
+    candidates = session.exec(
+        select(Task).where(
+            Task.user_id == occurrence.user_id,
+            Task.deleted_at.is_(None),
+            Task.id != own_task_id if own_task_id is not None else True,
+        )
+    ).all()
+    for candidate in candidates:
+        rule = candidate.completion_rule if isinstance(candidate.completion_rule, dict) else {}
+        consistency = rule.get("consistency") if rule.get("type") == "hybrid" else rule
+        if not isinstance(consistency, dict) or consistency.get("type") != "consistency":
+            continue
+        configured = consistency.get("todo_ids")
+        if not isinstance(configured, list):
+            configured = [consistency.get("todo_id")] if consistency.get("todo_id") else []
+        if occurrence_todo_id in {str(item) for item in configured}:
+            recalculate_task_hierarchy(session, candidate.id)
 
 
 def recalculate_for_metric(session: Session, metric: MetricDefinition) -> None:
