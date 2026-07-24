@@ -42,6 +42,7 @@ typing-inspection = "==0.4.0"
 tzdata = "==2025.2"
 uvicorn = "==0.34.2"
 httpx = "*"
+psycopg = {extras = ["binary"], version = ">=3.2,<4"}
 
 [dev-packages]
 
